@@ -675,6 +675,15 @@ App.Views.OrderTicket = Backbone.View.extend({
         <option value='5'>GTX</option>
       </select>
     </div>
+
+    <div class='form-group'>
+      <label for='openClose'>OpenClose</label>
+      <select class='form-control' name='openClose'>
+        <option value=''></option>
+        <option value='O'>O</option>
+        <option value='C'>C</option>
+      </select>
+    </div>
   </p>
 
   <p>
@@ -711,6 +720,7 @@ App.Views.OrderTicket = Backbone.View.extend({
       stop_price:           this.$('input[name=stopPrice]').val(),
       account:              this.$('input[name=account]').val(),
       tif:                  this.$('select[name=tif]').val(),
+      open_close:           this.$('select[name=openClose]').val(),
       session_id:           this.$('select[name=session]').val(),
       security_type:        this.$('select[name=security_type]').val(),
       security_desc:        this.$('select[name=security_desc]').val(),

@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/fatih/color v1.16.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gosuri/uitable v0.0.4
 	github.com/quickfixgo/enum v0.1.0

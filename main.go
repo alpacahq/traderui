@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/gorilla/mux"
+	"github.com/quickfixgo/traderui/alpaca"
 	"github.com/quickfixgo/traderui/basic"
 	"github.com/quickfixgo/traderui/oms"
 	"github.com/quickfixgo/traderui/secmaster"
@@ -292,7 +293,7 @@ func main() {
 	logFactory := NewFancyLog()
 
 	var fixApp quickfix.Application
-	app := newTradeClient(basic.FIXFactory{}, new(basic.ClOrdIDGenerator))
+	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator))
 	fixApp = &basic.FIXApplication{
 		SessionIDs:   app.SessionIDs,
 		OrderManager: app.OrderManager,
