@@ -1,6 +1,7 @@
 module github.com/quickfixgo/traderui
 
 go 1.21
+toolchain go1.23.7
 
 require (
 	github.com/fatih/color v1.16.0
@@ -27,6 +28,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quickfixgo/fixt11 v0.1.0 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
-	golang.org/x/net v0.18.0 // indirect
-	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 )
