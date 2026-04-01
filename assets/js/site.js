@@ -351,6 +351,18 @@ App.Views.OrderDetails = Backbone.View.extend({
       <input type="number" class="form-control" id="quantity" placeholder="Quantity" value="<%= quantity %>" required>
     </div>
   </div>
+  <div class="form-group">
+    <label for="price" class="col-sm-2 control-label">Price</label>
+    <div class="col-sm-10">
+      <input type="number" step=".01" class="form-control" id="price" placeholder="Price" value="<%= price %>">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="stop_price" class="col-sm-2 control-label">Stop Price</label>
+    <div class="col-sm-10">
+      <input type="number" step=".01" class="form-control" id="stop_price" placeholder="Stop Price" value="<%= stop_price %>">
+    </div>
+  </div>
   <% } %>
 
 </form>
@@ -383,7 +395,30 @@ App.Views.OrderDetails = Backbone.View.extend({
     },
 
     'click .amend': function(e) {
-      
+      var attrs = this.model.attributes;
+      var data = {
+        quantity:   this.$('#quantity').val() || attrs.quantity,
+        ord_type:   attrs.ord_type,
+        price:      this.$('#price').val() || attrs.price,
+        stop_price: this.$('#stop_price').val() || attrs.stop_price
+      };
+
+      var url = (attrs.security_type === "MLEG")
+        ? "/multileg-orders/" + attrs.id
+        : "/orders/" + attrs.id;
+
+      $.ajax({
+        type: "PUT",
+        url: url,
+        contentType: "application/json",
+        data: JSON.stringify(data),
+        success: function() {
+          Backbone.history.navigate("/orders", {trigger: true});
+        },
+        error: function(xhr) {
+          alert("Amend failed: " + xhr.responseText);
+        }
+      });
     }
   },
 });

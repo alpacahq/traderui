@@ -59,6 +59,61 @@ func (FIXFactory) OrderCancelRequest(order oms.Order, clOrdID string) (msg quick
 	return
 }
 
+// OrderCancelReplaceRequest builds a raw FIX G (OrderCancelReplaceRequest) message.
+func (FIXFactory) OrderCancelReplaceRequest(order oms.Order, clOrdID string) (quickfix.Messagable, error) {
+	m := quickfix.NewMessage()
+	m.Header.SetField(tag.MsgType, quickfix.FIXString("G"))
+	m.Body.SetField(tag.ClOrdID, quickfix.FIXString(clOrdID))
+	m.Body.SetField(tag.OrigClOrdID, quickfix.FIXString(order.ClOrdID))
+	m.Body.SetField(tag.HandlInst, quickfix.FIXString("1"))
+	m.Body.SetField(tag.Symbol, quickfix.FIXString(order.Symbol))
+	m.Body.SetField(tag.Side, quickfix.FIXString(string(order.Side)))
+	m.Body.Set(field.NewTransactTime(time.Now()))
+	m.Body.SetField(tag.OrdType, quickfix.FIXString(string(order.OrdType)))
+	m.Body.SetField(tag.Account, quickfix.FIXString(order.Account))
+	m.Body.Set(field.NewOrderQty(order.QuantityDecimal, 0))
+	m.Body.SetField(tag.TimeInForce, quickfix.FIXString(string(order.Tif)))
+
+	switch order.OrdType {
+	case enum.OrdType_LIMIT, enum.OrdType_STOP_LIMIT:
+		m.Body.Set(field.NewPrice(order.PriceDecimal, 2))
+	}
+	switch order.OrdType {
+	case enum.OrdType_STOP, enum.OrdType_STOP_LIMIT:
+		m.Body.Set(field.NewStopPx(order.StopPriceDecimal, 2))
+	}
+
+	return m, nil
+}
+
+// MultilegOrderCancelReplace builds a raw FIX AC (MultilegOrderCancelReplace) message.
+func (FIXFactory) MultilegOrderCancelReplace(order oms.Order, clOrdID string) (quickfix.Messagable, error) {
+	if len(order.Legs) == 0 {
+		return nil, errors.New("multileg cancel/replace requires at least one leg")
+	}
+
+	m := quickfix.NewMessage()
+	m.Header.SetField(tag.MsgType, quickfix.FIXString("AC"))
+	m.Body.SetField(tag.ClOrdID, quickfix.FIXString(clOrdID))
+	m.Body.SetField(tag.OrigClOrdID, quickfix.FIXString(order.ClOrdID))
+	m.Body.SetField(tag.HandlInst, quickfix.FIXString("1"))
+	m.Body.SetField(tag.Symbol, quickfix.FIXString(order.Symbol))
+	m.Body.Set(field.NewTransactTime(time.Now()))
+	m.Body.SetField(tag.OrdType, quickfix.FIXString(string(order.OrdType)))
+	m.Body.SetField(tag.Account, quickfix.FIXString(order.Account))
+	m.Body.Set(field.NewOrderQty(order.QuantityDecimal, 0))
+	m.Body.SetField(tag.SecurityType, quickfix.FIXString("MLEG"))
+
+	switch order.OrdType {
+	case enum.OrdType_LIMIT, enum.OrdType_STOP_LIMIT:
+		m.Body.Set(field.NewPrice(order.PriceDecimal, 2))
+	}
+
+	m.Body.SetGroup(buildLegsGroup(order.Legs))
+	return m, nil
+}
+
+
 func (FIXFactory) SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequest) (msg quickfix.Messagable, err error) {
 	err = errors.New("Not Implemented")
 	return

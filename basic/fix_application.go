@@ -51,6 +51,13 @@ func (a *FIXApplication) FromApp(msg *quickfix.Message, sessionID quickfix.Sessi
 	switch enum.MsgType(msgType) {
 	case enum.MsgType_EXECUTION_REPORT:
 		return a.onExecutionReport(msg, sessionID)
+	case enum.MsgType_ORDER_CANCEL_REJECT:
+		var text quickfix.FIXString
+		if msg.Body.Has(tag.Text) {
+			_ = msg.Body.GetField(tag.Text, &text)
+		}
+		log.Printf("[WARN] Order Cancel Reject: %s", string(text))
+		return nil
 	case enum.MsgType_BUSINESS_MESSAGE_REJECT:
 		var text quickfix.FIXString
 		if msg.Body.Has(tag.Text) {
@@ -109,6 +116,16 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		order.Closed = cumQty.String()
 		order.Open = leavesQty.String()
 		order.AvgPx = avgPx.String()
+
+		if msg.Body.Has(tag.OrderQty) {
+			order.Quantity = getStringTag(msg, tag.OrderQty, order.Quantity)
+		}
+		if msg.Body.Has(tag.Price) {
+			order.Price = getStringTag(msg, tag.Price, order.Price)
+		}
+		if msg.Body.Has(tag.StopPx) {
+			order.StopPrice = getStringTag(msg, tag.StopPx, order.StopPrice)
+		}
 	}
 
 	if msg.Body.Has(tag.LastShares) {

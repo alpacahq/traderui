@@ -23,8 +23,10 @@ import (
 type fixFactory interface {
 	NewOrderSingle(ord oms.Order) (msg quickfix.Messagable, err error)
 	OrderCancelRequest(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
+	OrderCancelReplaceRequest(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
 	SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequest) (msg quickfix.Messagable, err error)
 	NewOrderMultileg(ord oms.Order) (msg quickfix.Messagable, err error)
+	MultilegOrderCancelReplace(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
 }
 
 type tradeClient struct {
@@ -272,6 +274,66 @@ func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (c tradeClient) updateOrder(w http.ResponseWriter, r *http.Request) {
+	c.Lock()
+	defer c.Unlock()
+
+	order, err := c.fetchRequestedOrder(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	var update oms.Order
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&update); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := update.Init(); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	pending := *order
+	if update.Quantity != "" {
+		pending.Quantity = update.Quantity
+		pending.QuantityDecimal = update.QuantityDecimal
+	}
+	if update.OrdType != "" {
+		pending.OrdType = update.OrdType
+	}
+	if update.Price != "" {
+		pending.Price = update.Price
+		pending.PriceDecimal = update.PriceDecimal
+	}
+	if update.StopPrice != "" {
+		pending.StopPrice = update.StopPrice
+		pending.StopPriceDecimal = update.StopPriceDecimal
+	}
+
+	clOrdID := c.AssignNextClOrdID(order)
+
+	msg, err := c.OrderCancelReplaceRequest(pending, clOrdID)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = quickfix.SendToTarget(msg, order.SessionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	order.ClOrdID = clOrdID
+	c.writeOrderJSON(w, order)
+}
+
 var port = flag.String("port", "8080", "HTTP listen port")
 
 func (c tradeClient) newMultilegOrder(w http.ResponseWriter, r *http.Request) {
@@ -329,6 +391,62 @@ func (c tradeClient) newMultilegOrder(w http.ResponseWriter, r *http.Request) {
 	c.writeOrderJSON(w, &order)
 }
 
+func (c tradeClient) updateMultilegOrder(w http.ResponseWriter, r *http.Request) {
+	c.Lock()
+	defer c.Unlock()
+
+	order, err := c.fetchRequestedOrder(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	var update oms.Order
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&update); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := update.Init(); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	pending := *order
+	if update.Quantity != "" {
+		pending.Quantity = update.Quantity
+		pending.QuantityDecimal = update.QuantityDecimal
+	}
+	if update.OrdType != "" {
+		pending.OrdType = update.OrdType
+	}
+	if update.Price != "" {
+		pending.Price = update.Price
+		pending.PriceDecimal = update.PriceDecimal
+	}
+
+	clOrdID := c.AssignNextClOrdID(order)
+
+	msg, err := c.MultilegOrderCancelReplace(pending, clOrdID)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = quickfix.SendToTarget(msg, order.SessionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	order.ClOrdID = clOrdID
+	c.writeOrderJSON(w, order)
+}
+
 func main() {
 	flag.Parse()
 
@@ -373,12 +491,14 @@ func main() {
 	router.HandleFunc("/orders", app.newOrder).Methods("POST")
 	router.HandleFunc("/orders", app.getOrders).Methods("GET")
 	router.HandleFunc("/orders/{id:[0-9]+}", app.getOrder).Methods("GET")
+	router.HandleFunc("/orders/{id:[0-9]+}", app.updateOrder).Methods("PUT")
 	router.HandleFunc("/orders/{id:[0-9]+}", app.deleteOrder).Methods("DELETE")
 
 	router.HandleFunc("/executions", app.getExecutions).Methods("GET")
 	router.HandleFunc("/executions/{id:[0-9]+}", app.getExecution).Methods("GET")
 
 	router.HandleFunc("/multileg-orders", app.newMultilegOrder).Methods("POST")
+	router.HandleFunc("/multileg-orders/{id:[0-9]+}", app.updateMultilegOrder).Methods("PUT")
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
