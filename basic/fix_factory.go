@@ -2,6 +2,7 @@ package basic
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/quickfixgo/enum"
@@ -9,6 +10,7 @@ import (
 	"github.com/quickfixgo/tag"
 	"github.com/quickfixgo/traderui/oms"
 	"github.com/quickfixgo/traderui/secmaster"
+	"github.com/shopspring/decimal"
 
 	fix40nos "github.com/quickfixgo/fix40/newordersingle"
 	fix41nos "github.com/quickfixgo/fix41/newordersingle"
@@ -60,6 +62,68 @@ func (FIXFactory) OrderCancelRequest(order oms.Order, clOrdID string) (msg quick
 func (FIXFactory) SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequest) (msg quickfix.Messagable, err error) {
 	err = errors.New("Not Implemented")
 	return
+}
+
+// NewOrderMultileg builds a raw FIX AB (NewOrderMultileg) message.
+// Sent on a FIX 4.2 session using FIX 4.4 multileg tags.
+func (FIXFactory) NewOrderMultileg(order oms.Order) (quickfix.Messagable, error) {
+	if len(order.Legs) == 0 {
+		return nil, errors.New("multileg order requires at least one leg")
+	}
+
+	m := quickfix.NewMessage()
+	m.Header.SetField(tag.MsgType, quickfix.FIXString("AB"))
+	m.Body.SetField(tag.ClOrdID, quickfix.FIXString(order.ClOrdID))
+	m.Body.SetField(tag.HandlInst, quickfix.FIXString("1"))
+	m.Body.SetField(tag.Symbol, quickfix.FIXString(order.Symbol))
+	m.Body.Set(field.NewTransactTime(time.Now()))
+	m.Body.SetField(tag.OrdType, quickfix.FIXString(string(order.OrdType)))
+	m.Body.SetField(tag.Account, quickfix.FIXString(order.Account))
+	m.Body.Set(field.NewOrderQty(order.QuantityDecimal, 0))
+	m.Body.SetField(tag.TimeInForce, quickfix.FIXString(string(order.Tif)))
+	m.Body.SetField(tag.SecurityType, quickfix.FIXString("MLEG"))
+
+	switch order.OrdType {
+	case enum.OrdType_LIMIT, enum.OrdType_STOP_LIMIT:
+		m.Body.Set(field.NewPrice(order.PriceDecimal, 2))
+	}
+
+	m.Body.SetGroup(buildLegsGroup(order.Legs))
+	return m, nil
+}
+
+func buildLegsGroup(legs []oms.Leg) *quickfix.RepeatingGroup {
+	group := quickfix.NewRepeatingGroup(
+		tag.NoLegs,
+		quickfix.GroupTemplate{
+			quickfix.GroupElement(tag.LegSymbol),
+			quickfix.GroupElement(tag.LegRefID),
+			quickfix.GroupElement(tag.LegCFICode),
+			quickfix.GroupElement(tag.LegStrikePrice),
+			quickfix.GroupElement(tag.LegMaturityDate),
+			quickfix.GroupElement(tag.LegSide),
+			quickfix.GroupElement(tag.LegRatioQty),
+			quickfix.GroupElement(tag.LegPositionEffect),
+		},
+	)
+
+	for i, leg := range legs {
+		g := group.Add()
+		g.SetField(tag.LegSymbol, quickfix.FIXString(leg.Symbol))
+		g.SetField(tag.LegRefID, quickfix.FIXString(strconv.Itoa(i)))
+		g.SetField(tag.LegCFICode, quickfix.FIXString(leg.CFICode))
+		if leg.IsOption() {
+			strikePrice, _ := decimal.NewFromString(leg.StrikePrice)
+			g.SetField(tag.LegStrikePrice, quickfix.FIXDecimal{Decimal: strikePrice, Scale: 0})
+			g.SetField(tag.LegMaturityDate, quickfix.FIXString(leg.MaturityDate))
+		}
+		g.SetField(tag.LegSide, quickfix.FIXString(leg.Side))
+		ratioQty := decimal.NewFromInt(int64(leg.RatioQty))
+		g.SetField(tag.LegRatioQty, quickfix.FIXDecimal{Decimal: ratioQty, Scale: 0})
+		g.SetField(tag.LegPositionEffect, quickfix.FIXString(leg.PositionEffect))
+	}
+
+	return group
 }
 
 func populateOrder(genMessage quickfix.Messagable, ord oms.Order) (quickfix.Messagable, error) {

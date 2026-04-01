@@ -9,6 +9,22 @@ import (
 	"github.com/quickfixgo/quickfix"
 )
 
+// Leg represents a single leg in a multileg order
+type Leg struct {
+	Symbol         string `json:"leg_symbol"`
+	CFICode        string `json:"leg_cfi_code"`         // OC=Call, OP=Put, ES=Equity
+	StrikePrice    string `json:"leg_strike_price"`
+	MaturityDate   string `json:"leg_maturity_date"`    // YYYYMMDD
+	Side           string `json:"leg_side"`             // 1=Buy, 2=Sell
+	RatioQty       int    `json:"leg_ratio_qty"`
+	PositionEffect string `json:"leg_position_effect"`  // O=Open, C=Close
+}
+
+// IsOption returns true if the leg represents a call or put
+func (l Leg) IsOption() bool {
+	return l.CFICode == "OC" || l.CFICode == "OP"
+}
+
 // Order is the order type
 type Order struct {
 	ID                 int                `json:"id"`
@@ -38,6 +54,7 @@ type Order struct {
 	StrikePriceDecimal decimal.Decimal    `json:"-"`
 	Tif                enum.TimeInForce   `json:"tif"`
 	OpenClose          enum.OpenClose     `json:"open_close"`
+	Legs               []Leg              `json:"legs,omitempty"`
 }
 
 // Init initialized computed fields on order from user input

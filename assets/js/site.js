@@ -54,6 +54,7 @@ var App = new( Backbone.View.extend({
     $("#app").append(ordersView.render().el);
     $("#nav-order").addClass("active");
     $("#nav-execution").removeClass("active");
+    $("#nav-multileg").removeClass("active");
     $("#nav-secdef").removeClass("active");
   },
 
@@ -65,6 +66,19 @@ var App = new( Backbone.View.extend({
     $("#app").append(executionsView.render().el);
     $("#nav-order").removeClass("active");
     $("#nav-execution").addClass("active");
+    $("#nav-multileg").removeClass("active");
+    $("#nav-secdef").removeClass("active");
+  },
+
+  showMultileg: function() {
+    var multilegTicket = new App.Views.MultilegTicket({model: this.orderTicket});
+    var ordersView = new App.Views.OrdersView({collection: this.orders});
+
+    $("#app").html(multilegTicket.render().el);
+    $("#app").append(ordersView.render().el);
+    $("#nav-order").removeClass("active");
+    $("#nav-execution").removeClass("active");
+    $("#nav-multileg").addClass("active");
     $("#nav-secdef").removeClass("active");
   },
 
@@ -73,6 +87,7 @@ var App = new( Backbone.View.extend({
     $("#app").html(secDefReq.render().el);
     $("#nav-order").removeClass("active");
     $("#nav-execution").removeClass("active");
+    $("#nav-multileg").removeClass("active");
     $("#nav-secdef").addClass("active");
   },
 
@@ -107,6 +122,7 @@ App.Router = Backbone.Router.extend({
     "": "index", 
     "orders": "index",
     "executions": "executions",
+    "multileg": "multileg",
     "secdefs": "secdefs",
     "orders/:id": "orderDetails",
     "executions/:id": "executionDetails",
@@ -118,6 +134,10 @@ App.Router = Backbone.Router.extend({
 
   executions: function() {
     App.showExecutions();
+  },
+
+  multileg: function() {
+    App.showMultileg();
   },
 
   secdefs: function() {
@@ -143,6 +163,10 @@ App.Models.Execution = Backbone.Model.extend({
 
 App.Models.SecurityDefinitionRequest = Backbone.Model.extend({
   urlRoot: "securitydefinitionrequest"
+});
+
+App.Models.MultilegOrder = Backbone.Model.extend({
+  urlRoot: "/multileg-orders"
 });
 
 App.Models.OrderTicket = Backbone.Model.extend({});
@@ -821,6 +845,184 @@ App.Views.OrderTicket = Backbone.View.extend({
   }
 });
 
+App.Views.MultilegTicket = Backbone.View.extend({
+  template: _.template(`
+<h4>Multileg Order</h4>
+<form class='form-inline' id='multileg-ticket'>
+  <p>
+    <div class='form-group'>
+      <label for='ml-symbol'>Symbol (root)</label>
+      <input type='text' class='form-control' name='symbol' id='ml-symbol' placeholder='e.g. AAPL' required>
+    </div>
+
+    <div class='form-group'>
+      <label for='ml-quantity'>Spread Qty</label>
+      <input type='number' class='form-control' name='quantity' id='ml-quantity' placeholder='Qty' required>
+    </div>
+
+    <div class='form-group'>
+      <label for='ml-ordType'>Type</label>
+      <select class='form-control' name='ordType' id='ml-ordType'>
+        <option value='1'>Market</option>
+        <option value='2'>Limit</option>
+      </select>
+    </div>
+
+    <div class='form-group'>
+      <label for='ml-limit'>Limit</label>
+      <input type='number' step='.01' class='form-control' id='ml-limit' name='price' placeholder='Limit' disabled>
+    </div>
+  </p>
+
+  <p>
+    <div class='form-group'>
+      <label for='ml-account'>Account</label>
+      <input type='text' class='form-control' name='account' id='ml-account' placeholder='Account'>
+    </div>
+
+    <div class='form-group'>
+      <label for='ml-tif'>TIF</label>
+      <select class='form-control' name='tif' id='ml-tif'>
+        <option value='0'>Day</option>
+        <option value='3'>IOC</option>
+        <option value='1'>GTC</option>
+      </select>
+    </div>
+
+    <div class='form-group'>
+      <label for='ml-session'>Session</label>
+      <select class='form-control' name='session' id='ml-session'>
+        <% _.each(session_ids, function(i){ %><option><%= i %></option><% }); %>
+      </select>
+    </div>
+  </p>
+
+  <hr>
+  <h5>Legs <button type='button' class='btn btn-success btn-xs add-leg'>+ Add Leg</button></h5>
+  <table class='table table-condensed' id='legs-table'>
+    <thead>
+      <tr>
+        <th>CFI Code</th>
+        <th>Side</th>
+        <th>Ratio Qty</th>
+        <th>Strike</th>
+        <th>Maturity (YYYYMMDD)</th>
+        <th>Pos Effect</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+
+  <button type='submit' class='btn btn-primary'>Submit Multileg Order</button>
+</form>
+`),
+
+  legRowTemplate: _.template(`
+<tr class='leg-row'>
+  <td>
+    <select class='form-control input-sm leg-cfi'>
+      <option value='OC'>Call</option>
+      <option value='OP'>Put</option>
+      <option value='ES'>Equity</option>
+    </select>
+  </td>
+  <td>
+    <select class='form-control input-sm leg-side'>
+      <option value='1'>Buy</option>
+      <option value='2'>Sell</option>
+    </select>
+  </td>
+  <td><input type='number' class='form-control input-sm leg-ratio' value='1' min='1'></td>
+  <td><input type='number' step='.01' class='form-control input-sm leg-strike' placeholder='Strike'></td>
+  <td><input type='text' class='form-control input-sm leg-maturity' placeholder='YYYYMMDD'></td>
+  <td>
+    <select class='form-control input-sm leg-poseffect'>
+      <option value='O'>Open</option>
+      <option value='C'>Close</option>
+    </select>
+  </td>
+  <td><button type='button' class='btn btn-danger btn-xs remove-leg'>X</button></td>
+</tr>
+`),
+
+  render: function() {
+    this.$el.html(this.template(this.model.attributes));
+    this.addLegRow();
+    this.addLegRow();
+    return this;
+  },
+
+  events: {
+    "click .add-leg": "addLegRow",
+    "click .remove-leg": "removeLegRow",
+    "change #ml-ordType": "updateOrdType",
+    "change .leg-cfi": "updateLegFields",
+    submit: "submit"
+  },
+
+  addLegRow: function() {
+    this.$("#legs-table tbody").append(this.legRowTemplate());
+  },
+
+  removeLegRow: function(e) {
+    $(e.target).closest('tr').remove();
+  },
+
+  updateOrdType: function() {
+    var isLimit = this.$("#ml-ordType").val() === "2";
+    this.$("#ml-limit").prop("disabled", !isLimit).prop("required", isLimit);
+  },
+
+  updateLegFields: function(e) {
+    var row = $(e.target).closest('tr');
+    var isOption = ($(e.target).val() === "OC" || $(e.target).val() === "OP");
+    row.find('.leg-strike').prop('disabled', !isOption).prop('required', isOption);
+    row.find('.leg-maturity').prop('disabled', !isOption).prop('required', isOption);
+  },
+
+  submit: function(e) {
+    e.preventDefault();
+    var symbol = this.$('#ml-symbol').val();
+    var legs = [];
+    this.$('.leg-row').each(function() {
+      var row = $(this);
+      legs.push({
+        leg_symbol:          symbol,
+        leg_cfi_code:        row.find('.leg-cfi').val(),
+        leg_side:            row.find('.leg-side').val(),
+        leg_ratio_qty:       parseInt(row.find('.leg-ratio').val()) || 1,
+        leg_strike_price:    row.find('.leg-strike').val() || "",
+        leg_maturity_date:   row.find('.leg-maturity').val() || "",
+        leg_position_effect: row.find('.leg-poseffect').val()
+      });
+    });
+
+    if (legs.length === 0) {
+      alert("Add at least one leg");
+      return;
+    }
+
+    var order = new App.Models.MultilegOrder();
+    order.set({
+      symbol:     symbol,
+      quantity:   this.$('#ml-quantity').val(),
+      ord_type:   this.$('#ml-ordType').val(),
+      price:      this.$('#ml-limit').val() || "",
+      account:    this.$('#ml-account').val(),
+      tif:        this.$('#ml-tif').val(),
+      session_id: this.$('#ml-session').val(),
+      legs:       legs
+    });
+    order.save(null, {
+      error: function(model, response) {
+        alert("Error: " + response.responseText);
+      }
+    });
+  }
+});
+
 App.prettySide = function(sideEnum) {
   switch(sideEnum) {
     case "1":
@@ -858,6 +1060,7 @@ App.prettySecurityType = function(val) {
     case "CS": return "Common Stock";
     case "FUT": return "Future";
     case "OPT": return "Option";
+    case "MLEG": return "Multileg";
   }
   return val || "";
 };

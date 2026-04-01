@@ -51,6 +51,13 @@ func (a *FIXApplication) FromApp(msg *quickfix.Message, sessionID quickfix.Sessi
 	switch enum.MsgType(msgType) {
 	case enum.MsgType_EXECUTION_REPORT:
 		return a.onExecutionReport(msg, sessionID)
+	case enum.MsgType_BUSINESS_MESSAGE_REJECT:
+		var text quickfix.FIXString
+		if msg.Body.Has(tag.Text) {
+			_ = msg.Body.GetField(tag.Text, &text)
+		}
+		log.Printf("[WARN] Business Message Reject: %s", string(text))
+		return nil
 	}
 
 	return quickfix.UnsupportedMessageType()
@@ -86,14 +93,32 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		return err
 	}
 
-	order.Closed = cumQty.String()
-	order.Open = leavesQty.String()
-	order.AvgPx = avgPx.String()
+	isLegER := false
+	if msg.Body.Has(tag.MultiLegReportingType) {
+		var mlrt field.MultiLegReportingTypeField
+		if err := msg.Body.Get(&mlrt); err != nil {
+			return err
+		}
+		switch mlrt.Value() {
+		case enum.MultiLegReportingType_INDIVIDUAL_LEG_OF_A_MULTI_LEG_SECURITY:
+			isLegER = true
+		}
+	}
+
+	if !isLegER {
+		order.Closed = cumQty.String()
+		order.Open = leavesQty.String()
+		order.AvgPx = avgPx.String()
+	}
 
 	if msg.Body.Has(tag.LastShares) {
 		var lastShares field.LastSharesField
 		if err := msg.Body.Get(&lastShares); err != nil {
 			return err
+		}
+
+		if lastShares.Decimal.IsZero() {
+			return nil
 		}
 
 		var price field.LastPxField
@@ -102,18 +127,44 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		}
 
 		exec := new(oms.Execution)
-		exec.Symbol = order.Symbol
-		exec.Side = order.Side
-		exec.Session = order.Session
-		exec.SecurityType = order.SecurityType
-		exec.MaturityMonthYear = order.MaturityMonthYear
-		exec.PutOrCall = order.PutOrCall
-		exec.StrikePrice = order.StrikePrice
-
 		exec.Quantity = lastShares.String()
 		exec.Price = price.String()
+		exec.Session = order.Session
+
+		if isLegER {
+			exec.Symbol = getStringTag(msg, tag.Symbol, order.Symbol)
+			exec.Side = enum.Side(getStringTag(msg, tag.Side, string(order.Side)))
+			exec.SecurityType = enum.SecurityType(getStringTag(msg, tag.SecurityType, string(order.SecurityType)))
+
+			if exec.SecurityType == enum.SecurityType_OPTION {
+				exec.MaturityMonthYear = getStringTag(msg, tag.MaturityMonthYear, "")
+				exec.StrikePrice = getStringTag(msg, tag.StrikePrice, "")
+				if msg.Body.Has(tag.PutOrCall) {
+					var poc field.PutOrCallField
+					if err := msg.Body.Get(&poc); err == nil {
+						exec.PutOrCall = poc.Value()
+					}
+				}
+			}
+		} else {
+			exec.Symbol = order.Symbol
+			exec.Side = order.Side
+			exec.SecurityType = order.SecurityType
+			exec.MaturityMonthYear = order.MaturityMonthYear
+			exec.PutOrCall = order.PutOrCall
+			exec.StrikePrice = order.StrikePrice
+		}
+
 		_ = a.SaveExecution(exec)
 	}
 
 	return nil
+}
+
+func getStringTag(msg *quickfix.Message, t quickfix.Tag, fallback string) string {
+	var val quickfix.FIXString
+	if err := msg.Body.GetField(t, &val); err == nil {
+		return string(val)
+	}
+	return fallback
 }

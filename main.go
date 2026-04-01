@@ -24,6 +24,7 @@ type fixFactory interface {
 	NewOrderSingle(ord oms.Order) (msg quickfix.Messagable, err error)
 	OrderCancelRequest(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
 	SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequest) (msg quickfix.Messagable, err error)
+	NewOrderMultileg(ord oms.Order) (msg quickfix.Messagable, err error)
 }
 
 type tradeClient struct {
@@ -154,6 +155,7 @@ func (c tradeClient) deleteOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clOrdID := c.AssignNextClOrdID(order)
+
 	msg, err := c.OrderCancelRequest(*order, clOrdID)
 	if err != nil {
 		log.Printf("[ERROR] err = %+v\n", err)
@@ -272,6 +274,61 @@ func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 
 var port = flag.String("port", "8080", "HTTP listen port")
 
+func (c tradeClient) newMultilegOrder(w http.ResponseWriter, r *http.Request) {
+	var order oms.Order
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&order)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if sessionID, ok := c.SessionIDs[order.Session]; ok {
+		order.SessionID = sessionID
+	} else {
+		log.Println("[ERROR] Invalid SessionID")
+		http.Error(w, "Invalid SessionID", http.StatusBadRequest)
+		return
+	}
+
+	order.SecurityType = "MLEG"
+
+	if err = order.Init(); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(order.Legs) == 0 {
+		http.Error(w, "At least one leg is required", http.StatusBadRequest)
+		return
+	}
+
+	if order.Symbol == "" {
+		order.Symbol = order.Legs[0].Symbol
+	}
+
+	c.Lock()
+	_ = c.OrderManager.Save(&order)
+	c.Unlock()
+
+	msg, err := c.NewOrderMultileg(order)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = quickfix.SendToTarget(msg, order.SessionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	c.writeOrderJSON(w, &order)
+}
+
 func main() {
 	flag.Parse()
 
@@ -321,6 +378,7 @@ func main() {
 	router.HandleFunc("/executions", app.getExecutions).Methods("GET")
 	router.HandleFunc("/executions/{id:[0-9]+}", app.getExecution).Methods("GET")
 
+	router.HandleFunc("/multileg-orders", app.newMultilegOrder).Methods("POST")
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
