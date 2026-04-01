@@ -6,6 +6,7 @@ import (
 
 	"github.com/quickfixgo/enum"
 	"github.com/quickfixgo/field"
+	"github.com/quickfixgo/tag"
 	"github.com/quickfixgo/traderui/oms"
 	"github.com/quickfixgo/traderui/secmaster"
 
@@ -72,6 +73,25 @@ func populateOrder(genMessage quickfix.Messagable, ord oms.Order) (quickfix.Mess
 	switch ord.OrdType {
 	case enum.OrdType_STOP, enum.OrdType_STOP_LIMIT:
 		msg.Body.Set(field.NewStopPx(ord.StopPriceDecimal, 2))
+	}
+
+	if len(ord.SecurityType) > 0 {
+		msg.Body.Set(field.NewSecurityType(ord.SecurityType))
+	}
+
+	if len(ord.MaturityMonthYear) > 0 {
+		msg.Body.Set(field.NewMaturityMonthYear(ord.MaturityMonthYear))
+	}
+
+	if ord.MaturityDay > 0 {
+		msg.Body.SetInt(tag.MaturityDay, ord.MaturityDay)
+	}
+
+	if ord.SecurityType == enum.SecurityType_OPTION {
+		msg.Body.Set(field.NewPutOrCall(ord.PutOrCall))
+		if !ord.StrikePriceDecimal.IsZero() {
+			msg.Body.Set(field.NewStrikePrice(ord.StrikePriceDecimal, 2))
+		}
 	}
 
 	return msg, nil

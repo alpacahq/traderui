@@ -270,6 +270,8 @@ func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var port = flag.String("port", "8080", "HTTP listen port")
+
 func main() {
 	flag.Parse()
 
@@ -324,5 +326,7 @@ func main() {
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	router.HandleFunc("/", app.traderView)
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	addr := ":" + *port
+	log.Printf("Listening on %s\n", addr)
+	log.Fatal(http.ListenAndServe(addr, router))
 }

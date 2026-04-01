@@ -105,6 +105,10 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		exec.Symbol = order.Symbol
 		exec.Side = order.Side
 		exec.Session = order.Session
+		exec.SecurityType = order.SecurityType
+		exec.MaturityMonthYear = order.MaturityMonthYear
+		exec.PutOrCall = order.PutOrCall
+		exec.StrikePrice = order.StrikePrice
 
 		exec.Quantity = lastShares.String()
 		exec.Price = price.String()

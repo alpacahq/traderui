@@ -163,11 +163,17 @@ App.Views.ExecutionDetails = Backbone.View.extend({
 <dl class="dl-horizontal">
   <dt>ID</dt><dd><%= id %></dd> 
 	<dt>Symbol</dt><dd><%= symbol %></dd>
+	<dt>Security Type</dt><dd><%= App.prettySecurityType(security_type) %></dd>
 	<dt>Quantity</dt><dd><%= quantity %></dd>
 	<dt>Session</dt><dd><%= session_id %></dd>
   <dt>Side</dt><dd><%= App.prettySide(side) %></dd>
 	<dt>Price</dt><dd><%= price %></dd>
-</ul>
+	<% if (security_type === "OPT") { %>
+	<dt>Put or Call</dt><dd><%= App.prettyPutOrCall(put_or_call) %></dd>
+	<dt>Strike Price</dt><dd><%= strike_price %></dd>
+	<dt>Maturity</dt><dd><%= maturity_month_year %></dd>
+	<% } %>
+</dl>
 
 </div>
   <a href='#' data-internal='true'>Back</a>
@@ -365,9 +371,12 @@ App.Views.ExecutionRowView = Backbone.View.extend({
 <button class="btn btn-info details">Details</button>
 </td>
 <td><%= symbol %></td>
+<td><%= App.prettySecurityType(security_type) %></td>
 <td><%= quantity %></td>
 <td><%= App.prettySide(side) %></td>
 <td><%= price %></td>
+<td><%= security_type === "OPT" ? App.prettyPutOrCall(put_or_call) : "" %></td>
+<td><%= strike_price || "" %></td>
 <td><%= session_id %></td>
 `),
 
@@ -393,6 +402,7 @@ App.Views.OrderRowView = Backbone.View.extend({
 <button class="btn btn-info details">Details</button>
 </td>
 <td><%= symbol %></td>
+<td><%= App.prettySecurityType(security_type) %></td>
 <td><%= quantity %></td>
 <td><%= account %></td>
 <td><%= open %></td>
@@ -434,9 +444,12 @@ App.Views.Executions = Backbone.View.extend({
     <tr>
       <th></th>
       <th>Symbol</th>
+      <th>Security Type</th>
       <th>Quantity</th>
       <th>Side</th>
       <th>Price</th>
+      <th>Put/Call</th>
+      <th>Strike</th>
       <th>Session</th>
     </tr>
   </thead>
@@ -473,6 +486,7 @@ App.Views.OrdersView = Backbone.View.extend({
     <tr>
       <th></th>
       <th>Symbol</th>
+      <th>Security Type</th>
       <th>Quantity</th>
       <th>Account</th>
       <th>Open</th>
@@ -723,7 +737,7 @@ App.Views.OrderTicket = Backbone.View.extend({
       open_close:           this.$('select[name=openClose]').val(),
       session_id:           this.$('select[name=session]').val(),
       security_type:        this.$('select[name=security_type]').val(),
-      security_desc:        this.$('select[name=security_desc]').val(),
+      security_desc:        this.$('input[name=security_desc]').val(),
       maturity_month_year:  this.$('input[name=maturity_month_year]').val(),
       maturity_day:         parseInt(this.$('input[name=maturity_day]').val()),
       put_or_call:          this.$('select[name=put_or_call]').val(),
@@ -837,6 +851,23 @@ App.prettyOrdType = function(ordTypeEnum) {
   };
 
   return ordTypeEnum;
+};
+
+App.prettySecurityType = function(val) {
+  switch (val) {
+    case "CS": return "Common Stock";
+    case "FUT": return "Future";
+    case "OPT": return "Option";
+  }
+  return val || "";
+};
+
+App.prettyPutOrCall = function(val) {
+  switch (String(val)) {
+    case "0": return "Put";
+    case "1": return "Call";
+  }
+  return val != null ? val : "";
 };
 
 
