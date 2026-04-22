@@ -2,6 +2,7 @@ package basic
 
 import (
 	"log"
+	"strconv"
 	"sync"
 
 	"github.com/quickfixgo/enum"
@@ -17,8 +18,14 @@ type FIXApplication struct {
 	SessionIDs map[string]quickfix.SessionID
 	*oms.OrderManager
 
-	statusMu  sync.RWMutex
-	loggedOn  map[string]bool
+	statusMu sync.RWMutex
+	loggedOn map[string]bool
+
+	// seqMu guards clOrdBySeq. It's populated in ToApp for outgoing
+	// order-related messages so that a BusinessMessageReject carrying
+	// only RefSeqNum (tag 45) can still be mapped back to its ClOrdID.
+	seqMu       sync.RWMutex
+	clOrdBySeq  map[string]string // key: sessionID + "/" + seqNum
 }
 
 // SessionStatus reports whether each known session is currently logged on.
@@ -67,9 +74,49 @@ func (a *FIXApplication) FromAdmin(msg *quickfix.Message, sessionID quickfix.Ses
 	return
 }
 
-// ToApp is ignored
+// ToApp captures outgoing order-related messages so we can look up a
+// ClOrdID from a RefSeqNum when a Business Message Reject does not include
+// BusinessRejectRefID (tag 379).
 func (a *FIXApplication) ToApp(msg *quickfix.Message, sessionID quickfix.SessionID) (err error) {
+	msgType, mtErr := msg.MsgType()
+	if mtErr != nil {
+		return
+	}
+
+	switch msgType {
+	case "D", "AB", "F", "G", "AC":
+	default:
+		return
+	}
+
+	var seqNum quickfix.FIXInt
+	if hErr := msg.Header.GetField(tag.MsgSeqNum, &seqNum); hErr != nil {
+		return
+	}
+
+	clOrdID := getStringTag(msg, tag.ClOrdID, "")
+	if clOrdID == "" {
+		return
+	}
+
+	a.seqMu.Lock()
+	if a.clOrdBySeq == nil {
+		a.clOrdBySeq = make(map[string]string)
+	}
+	a.clOrdBySeq[seqKey(sessionID, int(seqNum))] = clOrdID
+	a.seqMu.Unlock()
 	return
+}
+
+func seqKey(sessionID quickfix.SessionID, seqNum int) string {
+	return sessionID.String() + "/" + strconv.Itoa(seqNum)
+}
+
+func (a *FIXApplication) lookupClOrdIDBySeq(sessionID quickfix.SessionID, seqNum int) (string, bool) {
+	a.seqMu.RLock()
+	defer a.seqMu.RUnlock()
+	id, ok := a.clOrdBySeq[seqKey(sessionID, seqNum)]
+	return id, ok
 }
 
 // FromApp listens for just execution reports
@@ -136,9 +183,21 @@ func (a *FIXApplication) onBusinessMessageReject(msg *quickfix.Message, sessionI
 	refMsgType := getStringTag(msg, tag.RefMsgType, "")
 	refID := getStringTag(msg, tag.BusinessRejectRefID, "")
 	rejCode := getStringTag(msg, tag.BusinessRejectReason, "")
+	refSeqNum := getStringTag(msg, tag.RefSeqNum, "")
 
-	log.Printf("[WARN] Business Message Reject: refMsgType=%s refID=%s code=%s text=%s",
-		refMsgType, refID, rejCode, text)
+	log.Printf("[WARN] Business Message Reject: refMsgType=%s refID=%s refSeqNum=%s code=%s text=%s",
+		refMsgType, refID, refSeqNum, rejCode, text)
+
+	// Some counterparties don't echo BusinessRejectRefID; fall back to
+	// RefSeqNum (tag 45) mapped via the outgoing seq -> ClOrdID table.
+	if refID == "" && refSeqNum != "" {
+		if seqNum, convErr := strconv.Atoi(refSeqNum); convErr == nil {
+			if id, ok := a.lookupClOrdIDBySeq(sessionID, seqNum); ok {
+				refID = id
+				log.Printf("[INFO] Business Message Reject: resolved refSeqNum=%d -> clOrdID=%s", seqNum, refID)
+			}
+		}
+	}
 
 	if refID == "" {
 		return nil
