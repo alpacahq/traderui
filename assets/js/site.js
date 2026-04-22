@@ -1304,7 +1304,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
       row.find('.leg-strike').val('');
       row.find('.leg-maturity').val('');
     }
-    row.find('.leg-poseffect').prop('disabled', isStock);
+    row.find('.leg-poseffect').prop('disabled', false);
   },
 
   updateLegPreset: function(e) {
@@ -1319,7 +1319,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
       row.find('.leg-cfi').val('ES');
       row.find('.leg-strike').val('').prop('disabled', true).prop('required', false);
       row.find('.leg-maturity').val('').prop('disabled', true).prop('required', false);
-      row.find('.leg-poseffect').prop('disabled', true);
+      row.find('.leg-poseffect').prop('disabled', false);
       // Default equity leg ratio to 100 shares per contract (covered-call
       // convention). User can override.
       if (row.find('.leg-ratio').val() === '1') {
@@ -1351,7 +1351,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
         leg_ratio_qty:       parseInt(row.find('.leg-ratio').val()) || 1,
         leg_strike_price:    isOption ? (row.find('.leg-strike').val() || "") : "",
         leg_maturity_date:   isOption ? (row.find('.leg-maturity').val() || "") : "",
-        leg_position_effect: isOption ? row.find('.leg-poseffect').val() : ""
+        leg_position_effect: row.find('.leg-poseffect').val() || ""
       });
     });
 

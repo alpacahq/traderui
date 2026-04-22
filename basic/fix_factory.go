@@ -181,8 +181,10 @@ func buildLegsGroup(legs []oms.Leg) *quickfix.RepeatingGroup {
 		g.SetField(tag.LegSide, quickfix.FIXString(leg.Side))
 		ratioQty := decimal.NewFromInt(int64(leg.RatioQty))
 		g.SetField(tag.LegRatioQty, quickfix.FIXDecimal{Decimal: ratioQty, Scale: 0})
-		// PositionEffect is an options concept; only emit it for option legs.
-		if leg.IsOption() && leg.PositionEffect != "" {
+		// Position intent applies to both option and stock legs (e.g. a
+		// covered-call equity leg can be Open or Close). Emit whenever the
+		// user has specified one.
+		if leg.PositionEffect != "" {
 			g.SetField(tag.LegPositionEffect, quickfix.FIXString(leg.PositionEffect))
 		}
 	}
