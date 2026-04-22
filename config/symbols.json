@@ -1,45 +1,54 @@
 {
   "symbols": [
-    {
-      "symbol": "AAPL",
-      "type": "CS",
-      "description": "Apple Inc."
-    },
-    {
-      "symbol": "AAPL",
-      "type": "OPT",
-      "description": "AAPL Jul 2025 200 Call",
-      "cfi_code": "OC",
-      "strike_price": "200",
-      "maturity_date": "20250718",
-      "maturity_month_year": "202507"
-    },
-    {
-      "symbol": "AAPL",
-      "type": "OPT",
-      "description": "AAPL Jul 2025 200 Put",
-      "cfi_code": "OP",
-      "strike_price": "200",
-      "maturity_date": "20250718",
-      "maturity_month_year": "202507"
-    },
-    {
-      "symbol": "AAPL",
-      "type": "OPT",
-      "description": "AAPL Jul 2025 210 Call",
-      "cfi_code": "OC",
-      "strike_price": "210",
-      "maturity_date": "20250718",
-      "maturity_month_year": "202507"
-    },
-    {
-      "symbol": "AAPL",
-      "type": "OPT",
-      "description": "AAPL Jul 2025 210 Put",
-      "cfi_code": "OP",
-      "strike_price": "210",
-      "maturity_date": "20250718",
-      "maturity_month_year": "202507"
-    }
+    { "symbol": "AAPL",  "type": "CS", "description": "Apple Inc." },
+    { "symbol": "MSFT",  "type": "CS", "description": "Microsoft Corp." },
+    { "symbol": "NVDA",  "type": "CS", "description": "NVIDIA Corp." },
+    { "symbol": "GOOGL", "type": "CS", "description": "Alphabet Inc. Class A" },
+    { "symbol": "META",  "type": "CS", "description": "Meta Platforms Inc." },
+    { "symbol": "AMZN",  "type": "CS", "description": "Amazon.com Inc." },
+    { "symbol": "TSLA",  "type": "CS", "description": "Tesla Inc." },
+    { "symbol": "AMD",   "type": "CS", "description": "Advanced Micro Devices Inc." },
+    { "symbol": "SPY",   "type": "CS", "description": "SPDR S&P 500 ETF Trust" },
+    { "symbol": "QQQ",   "type": "CS", "description": "Invesco QQQ Trust" },
+
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL May 15 2026 265 Call", "cfi_code": "OC", "strike_price": "265", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL May 15 2026 265 Put",  "cfi_code": "OP", "strike_price": "265", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL May 15 2026 270 Call", "cfi_code": "OC", "strike_price": "270", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL May 15 2026 270 Put",  "cfi_code": "OP", "strike_price": "270", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL Jun 19 2026 270 Call", "cfi_code": "OC", "strike_price": "270", "maturity_date": "20260619", "maturity_month_year": "202606" },
+    { "symbol": "AAPL",  "type": "OPT", "description": "AAPL Jun 19 2026 270 Put",  "cfi_code": "OP", "strike_price": "270", "maturity_date": "20260619", "maturity_month_year": "202606" },
+
+    { "symbol": "MSFT",  "type": "OPT", "description": "MSFT May 15 2026 420 Call", "cfi_code": "OC", "strike_price": "420", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "MSFT",  "type": "OPT", "description": "MSFT May 15 2026 420 Put",  "cfi_code": "OP", "strike_price": "420", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "MSFT",  "type": "OPT", "description": "MSFT Jun 19 2026 430 Call", "cfi_code": "OC", "strike_price": "430", "maturity_date": "20260619", "maturity_month_year": "202606" },
+
+    { "symbol": "NVDA",  "type": "OPT", "description": "NVDA May 15 2026 200 Call", "cfi_code": "OC", "strike_price": "200", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "NVDA",  "type": "OPT", "description": "NVDA May 15 2026 200 Put",  "cfi_code": "OP", "strike_price": "200", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "NVDA",  "type": "OPT", "description": "NVDA May 15 2026 210 Call", "cfi_code": "OC", "strike_price": "210", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "NVDA",  "type": "OPT", "description": "NVDA Jun 19 2026 200 Call", "cfi_code": "OC", "strike_price": "200", "maturity_date": "20260619", "maturity_month_year": "202606" },
+
+    { "symbol": "TSLA",  "type": "OPT", "description": "TSLA May 15 2026 390 Call", "cfi_code": "OC", "strike_price": "390", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "TSLA",  "type": "OPT", "description": "TSLA May 15 2026 400 Call", "cfi_code": "OC", "strike_price": "400", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "TSLA",  "type": "OPT", "description": "TSLA May 15 2026 400 Put",  "cfi_code": "OP", "strike_price": "400", "maturity_date": "20260515", "maturity_month_year": "202605" },
+
+    { "symbol": "SPY",   "type": "OPT", "description": "SPY May 15 2026 700 Call",  "cfi_code": "OC", "strike_price": "700", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "SPY",   "type": "OPT", "description": "SPY May 15 2026 700 Put",   "cfi_code": "OP", "strike_price": "700", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "SPY",   "type": "OPT", "description": "SPY May 15 2026 705 Call",  "cfi_code": "OC", "strike_price": "705", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "SPY",   "type": "OPT", "description": "SPY Jun 19 2026 710 Call",  "cfi_code": "OC", "strike_price": "710", "maturity_date": "20260619", "maturity_month_year": "202606" },
+
+    { "symbol": "QQQ",   "type": "OPT", "description": "QQQ May 15 2026 645 Call",  "cfi_code": "OC", "strike_price": "645", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "QQQ",   "type": "OPT", "description": "QQQ May 15 2026 640 Put",   "cfi_code": "OP", "strike_price": "640", "maturity_date": "20260515", "maturity_month_year": "202605" },
+
+    { "symbol": "META",  "type": "OPT", "description": "META May 15 2026 670 Call", "cfi_code": "OC", "strike_price": "670", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "META",  "type": "OPT", "description": "META May 15 2026 680 Call", "cfi_code": "OC", "strike_price": "680", "maturity_date": "20260515", "maturity_month_year": "202605" },
+
+    { "symbol": "AMZN",  "type": "OPT", "description": "AMZN May 15 2026 250 Call", "cfi_code": "OC", "strike_price": "250", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AMZN",  "type": "OPT", "description": "AMZN May 15 2026 250 Put",  "cfi_code": "OP", "strike_price": "250", "maturity_date": "20260515", "maturity_month_year": "202605" },
+
+    { "symbol": "AMD",   "type": "OPT", "description": "AMD May 15 2026 285 Call",  "cfi_code": "OC", "strike_price": "285", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "AMD",   "type": "OPT", "description": "AMD May 15 2026 285 Put",   "cfi_code": "OP", "strike_price": "285", "maturity_date": "20260515", "maturity_month_year": "202605" },
+
+    { "symbol": "GOOGL", "type": "OPT", "description": "GOOGL May 15 2026 330 Call","cfi_code": "OC", "strike_price": "330", "maturity_date": "20260515", "maturity_month_year": "202605" },
+    { "symbol": "GOOGL", "type": "OPT", "description": "GOOGL May 15 2026 335 Call","cfi_code": "OC", "strike_price": "335", "maturity_date": "20260515", "maturity_month_year": "202605" }
   ]
 }
