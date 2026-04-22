@@ -796,19 +796,18 @@ App.Views.OrderTicket = Backbone.View.extend({
     </div>
 
     <div class='form-group'>
+      <label for='root_select'>Root</label>
+      <select class='form-control' name='root_select' id='root_select'>
+        <% var roots = _.uniq(_.pluck(symbols, 'symbol')).sort(); %>
+        <% _.each(roots, function(r){ %>
+          <option value='<%= r %>'><%= r %></option>
+        <% }); %>
+      </select>
+    </div>
+
+    <div class='form-group'>
       <label for='symbol_select'>Symbol</label>
       <select class='form-control' name='symbol_select' id='symbol_select'>
-        <% _.each(symbols, function(s, i){ %>
-          <option value='sym-<%= i %>'
-            data-symbol='<%= s.symbol %>'
-            data-type='<%= s.type %>'
-            data-cfi='<%= s.cfi_code || "" %>'
-            data-strike='<%= s.strike_price || "" %>'
-            data-maturity-date='<%= s.maturity_date || "" %>'
-            data-maturity-my='<%= s.maturity_month_year || "" %>'
-            data-desc='<%= s.description || "" %>'
-          ><%= s.description %></option>
-        <% }); %>
         <option value='__custom__'>-- Custom Symbol --</option>
       </select>
     </div>
@@ -909,14 +908,41 @@ App.Views.OrderTicket = Backbone.View.extend({
 `),
   render: function() {
     this.$el.html(this.template(this.model.attributes));
+    this.populateSymbolSelect();
     return this;
   },
 
   events: {
     "change #ordType": "updateOrdType",
     "change #security_type": "updateSecurityType",
+    "change #root_select": "populateSymbolSelect",
     "change #symbol_select": "updateSymbolSelect",
     submit: "submit"
+  },
+
+  populateSymbolSelect: function() {
+    var root = this.$('#root_select').val();
+    var symbols = _.filter(this.model.get('symbols') || [], function(s) {
+      return s.symbol === root;
+    });
+
+    var $sel = this.$('#symbol_select');
+    $sel.empty();
+    _.each(symbols, function(s, i) {
+      var $opt = $('<option>')
+        .attr('value', 'sym-' + i)
+        .attr('data-symbol', s.symbol)
+        .attr('data-type', s.type)
+        .attr('data-cfi', s.cfi_code || '')
+        .attr('data-strike', s.strike_price || '')
+        .attr('data-maturity-date', s.maturity_date || '')
+        .attr('data-maturity-my', s.maturity_month_year || '')
+        .attr('data-desc', s.description || '')
+        .text(s.description);
+      $sel.append($opt);
+    });
+    $sel.append('<option value="__custom__">-- Custom Symbol --</option>');
+    this.updateSymbolSelect();
   },
 
   submit: function(e) {
@@ -1135,38 +1161,41 @@ App.Views.MultilegTicket = Backbone.View.extend({
 </form>
 `),
 
-  legRowTemplate: null,
-  getLegRowTemplate: function() {
-    if (!this._legTpl) {
-      var optSymbols = _.filter(App.symbols || [], function(s) { return s.type === 'OPT'; });
-      var optionsHtml = '<option value="">-- Manual --</option>';
-      _.each(optSymbols, function(s) {
-        optionsHtml += '<option value="' + s.description + '"'
-          + ' data-cfi="' + (s.cfi_code || '') + '"'
-          + ' data-strike="' + (s.strike_price || '') + '"'
-          + ' data-maturity="' + (s.maturity_date || '') + '"'
-          + '>' + s.description + '</option>';
-      });
-      this._legTpl = _.template(
-        '<tr class="leg-row">'
-        + '<td><select class="form-control input-sm leg-preset">' + optionsHtml + '</select></td>'
-        + '<td><select class="form-control input-sm leg-cfi">'
-        +   '<option value="OC">Call</option><option value="OP">Put</option><option value="ES">Equity</option>'
-        + '</select></td>'
-        + '<td><select class="form-control input-sm leg-side">'
-        +   '<option value="1">Buy</option><option value="2">Sell</option>'
-        + '</select></td>'
-        + '<td><input type="number" class="form-control input-sm leg-ratio" value="1" min="1"></td>'
-        + '<td><input type="number" step=".01" class="form-control input-sm leg-strike" placeholder="Strike"></td>'
-        + '<td><input type="text" class="form-control input-sm leg-maturity" placeholder="YYYYMMDD"></td>'
-        + '<td><select class="form-control input-sm leg-poseffect">'
-        +   '<option value="O">Open</option><option value="C">Close</option>'
-        + '</select></td>'
-        + '<td><button type="button" class="btn btn-danger btn-xs remove-leg">X</button></td>'
-        + '</tr>'
-      );
-    }
-    return this._legTpl;
+  buildLegPresetOptions: function(root) {
+    var optSymbols = _.filter(this.model.get('symbols') || [], function(s) {
+      return s.type === 'OPT' && s.symbol === root;
+    });
+    var optionsHtml = '<option value="">-- Manual --</option>';
+    _.each(optSymbols, function(s) {
+      optionsHtml += '<option value="' + s.description + '"'
+        + ' data-cfi="' + (s.cfi_code || '') + '"'
+        + ' data-strike="' + (s.strike_price || '') + '"'
+        + ' data-maturity="' + (s.maturity_date || '') + '"'
+        + '>' + s.description + '</option>';
+    });
+    return optionsHtml;
+  },
+
+  buildLegRow: function(root) {
+    var tpl = _.template(
+      '<tr class="leg-row">'
+      + '<td><select class="form-control input-sm leg-preset">' + this.buildLegPresetOptions(root) + '</select></td>'
+      + '<td><select class="form-control input-sm leg-cfi">'
+      +   '<option value="OC">Call</option><option value="OP">Put</option><option value="ES">Equity</option>'
+      + '</select></td>'
+      + '<td><select class="form-control input-sm leg-side">'
+      +   '<option value="1">Buy</option><option value="2">Sell</option>'
+      + '</select></td>'
+      + '<td><input type="number" class="form-control input-sm leg-ratio" value="1" min="1"></td>'
+      + '<td><input type="number" step=".01" class="form-control input-sm leg-strike" placeholder="Strike"></td>'
+      + '<td><input type="text" class="form-control input-sm leg-maturity" placeholder="YYYYMMDD"></td>'
+      + '<td><select class="form-control input-sm leg-poseffect">'
+      +   '<option value="O">Open</option><option value="C">Close</option>'
+      + '</select></td>'
+      + '<td><button type="button" class="btn btn-danger btn-xs remove-leg">X</button></td>'
+      + '</tr>'
+    );
+    return tpl();
   },
 
   render: function() {
@@ -1179,6 +1208,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
   events: {
     "click .add-leg": "addLegRow",
     "click .remove-leg": "removeLegRow",
+    "change #ml-symbol": "updateRoot",
     "change #ml-ordType": "updateOrdType",
     "change .leg-cfi": "updateLegFields",
     "change .leg-preset": "updateLegPreset",
@@ -1186,7 +1216,16 @@ App.Views.MultilegTicket = Backbone.View.extend({
   },
 
   addLegRow: function() {
-    this.$("#legs-table tbody").append(this.getLegRowTemplate()());
+    var root = this.$('#ml-symbol').val();
+    this.$("#legs-table tbody").append(this.buildLegRow(root));
+  },
+
+  updateRoot: function() {
+    var root = this.$('#ml-symbol').val();
+    var optionsHtml = this.buildLegPresetOptions(root);
+    this.$('.leg-preset').each(function() {
+      $(this).html(optionsHtml).val('');
+    });
   },
 
   removeLegRow: function(e) {
