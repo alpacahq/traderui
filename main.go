@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"text/template"
 
 	"github.com/gorilla/mux"
@@ -33,6 +34,28 @@ type SymbolEntry struct {
 
 type SymbolsConfig struct {
 	Symbols []SymbolEntry `json:"symbols"`
+}
+
+func parseAccounts(settings *quickfix.Settings) []string {
+	if settings == nil {
+		return nil
+	}
+	global := settings.GlobalSettings()
+	if global == nil || !global.HasSetting("Accounts") {
+		return nil
+	}
+	raw, err := global.Setting("Accounts")
+	if err != nil {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func loadSymbolsConfig(filePath string) (*SymbolsConfig, error) {
@@ -66,15 +89,17 @@ type sessionStatusSource interface {
 type tradeClient struct {
 	SessionIDs    map[string]quickfix.SessionID
 	symbolsConfig *SymbolsConfig
+	accounts      []string
 	statusSrc     sessionStatusSource
 	fixFactory
 	*oms.OrderManager
 }
 
-func newTradeClient(factory fixFactory, idGen oms.ClOrdIDGenerator, symbols *SymbolsConfig) *tradeClient {
+func newTradeClient(factory fixFactory, idGen oms.ClOrdIDGenerator, symbols *SymbolsConfig, accounts []string) *tradeClient {
 	tc := &tradeClient{
 		SessionIDs:    make(map[string]quickfix.SessionID),
 		symbolsConfig: symbols,
+		accounts:      accounts,
 		fixFactory:    factory,
 		OrderManager:  oms.NewOrderManager(idGen),
 	}
@@ -87,6 +112,14 @@ func (c tradeClient) SymbolsAsJSON() (string, error) {
 		return "[]", nil
 	}
 	b, err := json.Marshal(c.symbolsConfig.Symbols)
+	return string(b), err
+}
+
+func (c tradeClient) AccountsAsJSON() (string, error) {
+	if len(c.accounts) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(c.accounts)
 	return string(b), err
 }
 
@@ -531,9 +564,12 @@ func main() {
 	}
 	log.Printf("Loaded %d symbols from %s\n", len(symbolsCfg.Symbols), symbolsCfgPath)
 
+	accounts := parseAccounts(appSettings)
+	log.Printf("Loaded %d account(s): %v\n", len(accounts), accounts)
+
 	logFactory := NewFancyLog()
 
-	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator), symbolsCfg)
+	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator), symbolsCfg, accounts)
 	fixApp := &basic.FIXApplication{
 		SessionIDs:   app.SessionIDs,
 		OrderManager: app.OrderManager,

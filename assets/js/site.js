@@ -20,10 +20,12 @@ var App = new( Backbone.View.extend({
 
   start: function(options) {
     this.symbols = options.symbols || [];
+    this.accounts = options.accounts || [];
 
     this.orderTicket = new App.Models.OrderTicket({
       session_ids: options.session_ids,
-      symbols: this.symbols
+      symbols: this.symbols,
+      accounts: this.accounts
     });
 
     this.securityDefinitionForm = new App.Models.SecurityDefinitionForm({
@@ -871,7 +873,14 @@ App.Views.OrderTicket = Backbone.View.extend({
   <p>
     <div class='form-group'>
       <label for='account'>Account</label>
-      <input type='text' class='form-control' placeholder='Account' name='account'>
+      <select class='form-control' name='account' id='account'>
+        <% if (!accounts || !accounts.length) { %>
+          <option value=''></option>
+        <% } %>
+        <% _.each(accounts || [], function(a){ %>
+          <option value='<%= a %>'><%= a %></option>
+        <% }); %>
+      </select>
     </div>
 
     <div class='form-group'>
@@ -964,7 +973,7 @@ App.Views.OrderTicket = Backbone.View.extend({
       ord_type:             this.$('select[name=ordType]').val(),
       price:                this.$('input[name=price]').val(),
       stop_price:           this.$('input[name=stopPrice]').val(),
-      account:              this.$('input[name=account]').val(),
+      account:              this.$('[name=account]').val(),
       tif:                  this.$('select[name=tif]').val(),
       open_close:           this.$('select[name=openClose]').val(),
       session_id:           this.$('select[name=session]').val(),
@@ -1012,7 +1021,10 @@ App.Views.OrderTicket = Backbone.View.extend({
 
     if (type === 'OPT') {
       this.$('#security_type').val('OPT').trigger('change');
-      this.$('#maturity_month_year').val(matMY || '');
+      var mmy = matMY || (matDate ? String(matDate).substring(0, 6) : '');
+      var day = (matDate && String(matDate).length >= 8) ? String(matDate).substring(6, 8) : '';
+      this.$('#maturity_month_year').val(mmy);
+      this.$('#maturity_day').val(day ? parseInt(day, 10) : '');
       this.$('#strike_price').val(strike || '');
       if (cfi === 'OC') {
         this.$('#put_or_call').val('1');
@@ -1118,7 +1130,14 @@ App.Views.MultilegTicket = Backbone.View.extend({
   <p>
     <div class='form-group'>
       <label for='ml-account'>Account</label>
-      <input type='text' class='form-control' name='account' id='ml-account' placeholder='Account'>
+      <select class='form-control' name='account' id='ml-account'>
+        <% if (!accounts || !accounts.length) { %>
+          <option value=''></option>
+        <% } %>
+        <% _.each(accounts || [], function(a){ %>
+          <option value='<%= a %>'><%= a %></option>
+        <% }); %>
+      </select>
     </div>
 
     <div class='form-group'>
