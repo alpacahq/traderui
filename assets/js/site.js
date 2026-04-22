@@ -350,7 +350,7 @@ App.Views.OrderDetails = Backbone.View.extend({
       <p class="form-control-static"><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></p>
     </div>
   </div>
-  <% if (rejection_reason) { %>
+  <% if (typeof rejection_reason !== 'undefined' && rejection_reason) { %>
   <div class="form-group">
     <label class="col-sm-2 control-label">Rejection Reason</label>
     <div class="col-sm-10">
@@ -359,7 +359,7 @@ App.Views.OrderDetails = Backbone.View.extend({
   </div>
   <% } %>
 
-  <% if (last_op_rejection) { %>
+  <% if (typeof last_op_rejection !== 'undefined' && last_op_rejection) { %>
   <div class="form-group">
     <label class="col-sm-2 control-label">Last Op Reject</label>
     <div class="col-sm-10">
@@ -557,8 +557,8 @@ App.Views.OrderRowView = Backbone.View.extend({
 <td><%= stop_price %></td>
 <td><%= avg_px %></td>
 <td><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></td>
-<td><% if(rejection_reason){ %><span class="text-danger" title="<%= rejection_reason %>"><%= rejection_reason %></span><% } %></td>
-<td><% if(last_op_rejection){ %><span class="text-warning" title="<%= last_op_rejection %>">&#9888; <%= last_op_rejection %></span><% } %></td>
+<td><% if(typeof rejection_reason !== 'undefined' && rejection_reason){ %><span class="text-danger" title="<%= rejection_reason %>"><%= rejection_reason %></span><% } %></td>
+<td><% if(typeof last_op_rejection !== 'undefined' && last_op_rejection){ %><span class="text-warning" title="<%= last_op_rejection %>">&#9888; <%= last_op_rejection %></span><% } %></td>
 <td><%= session_id %></td>
 `),
 
