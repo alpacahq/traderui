@@ -43,7 +43,10 @@ var App = new( Backbone.View.extend({
 
   showOrders: function() {
     var orderTicketView = new App.Views.OrderTicket({model: this.orderTicket});
-    var ordersView = new App.Views.OrdersView({collection: this.orders});
+    var ordersView = new App.Views.OrdersView({
+      collection: this.orders,
+      filter: function(order) { return order.get('security_type') !== 'MLEG'; }
+    });
 
     $("#app").html(orderTicketView.render().el);
     $("#app").append(ordersView.render().el);
@@ -67,7 +70,10 @@ var App = new( Backbone.View.extend({
 
   showMultileg: function() {
     var multilegTicket = new App.Views.MultilegTicket({model: this.orderTicket});
-    var ordersView = new App.Views.OrdersView({collection: this.orders});
+    var ordersView = new App.Views.OrdersView({
+      collection: this.orders,
+      filter: function(order) { return order.get('security_type') === 'MLEG'; }
+    });
 
     $("#app").html(multilegTicket.render().el);
     $("#app").append(ordersView.render().el);
@@ -663,8 +669,17 @@ App.Views.Executions = Backbone.View.extend({
 });
 
 App.Views.OrdersView = Backbone.View.extend({
-  initialize: function() {
+  initialize: function(options) {
+    options = options || {};
+    this.filter = options.filter || null;
     this.listenTo(this.collection, 'reset update change', this.addAll);
+  },
+
+  visibleOrders: function() {
+    if (!this.filter) {
+      return this.collection.models;
+    }
+    return this.collection.filter(this.filter, this);
   },
 
   render: function() {
@@ -694,13 +709,13 @@ App.Views.OrdersView = Backbone.View.extend({
   </tbody>
 </table>`);
 
-    this.collection.forEach(this.addOne, this);
+    _.each(this.visibleOrders(), this.addOne, this);
     return this;
   },
 
   addAll: function() {
     this.$("tbody").empty();
-    this.collection.forEach(this.addOne, this);
+    _.each(this.visibleOrders(), this.addOne, this);
     return this;
   },
 
