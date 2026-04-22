@@ -1,17 +1,3 @@
-$(function() {
-  var form = $('#order-ticket');
-  $(form).submit(function(event) {
-    event.preventDefault();
-
-    var formData = $(form).serialize();
-    $.ajax({
-      type: "POST",
-      url: $(form).attr("action"),
-      data: formData
-    });
-  });
-});
-
 setInterval(function() {
   App.orders.fetch({reset: true});
   App.executions.fetch({reset: true});
@@ -26,7 +12,9 @@ var App = new( Backbone.View.extend({
   events: {
     'click a[data-internal]': function(e) {
       e.preventDefault();
-      Backbone.history.navigate(e.target.pathname, {trigger: true});
+      var href = e.currentTarget.getAttribute('href') || '';
+      var fragment = href.indexOf('#') >= 0 ? href.slice(href.indexOf('#') + 1) : href.replace(/^\//, '');
+      Backbone.history.navigate(fragment, {trigger: true});
     }
   },
 
@@ -46,7 +34,7 @@ var App = new( Backbone.View.extend({
     this.executions = new App.Collections.Executions(options.executions);
     this.router = new App.Router();
 
-    Backbone.history.start({pushState: true});
+    Backbone.history.start({pushState: false});
   },
 
   showOrders: function() {
@@ -396,11 +384,9 @@ App.Views.OrderDetails = Backbone.View.extend({
   <% } %>
 
 </form>
-</div>
-  <button class="btn btn-danger cancel" <% if(open == "0"){%>disabled<% }%>>Cancel</button>
-  <button class="btn btn-warning amend" <% if(open == "0"){%>disabled<% }%>>Amend</button>
-  <button class="btn btn-info back">Back</button>
-</div>
+<button class="btn btn-danger cancel" <% if(open == "0"){%>disabled<% }%>>Cancel</button>
+<button class="btn btn-warning amend" <% if(open == "0"){%>disabled<% }%>>Amend</button>
+<button class="btn btn-info back">Back</button>
 `),
   render: function() {
     this.$el.html(this.template(this.model.attributes));
@@ -414,7 +400,7 @@ App.Views.OrderDetails = Backbone.View.extend({
     'click .cancel': function(e) {
       this.model.destroy({
         success: function() {
-          Backbone.history.navigate("/orders", {trigger: true});
+          Backbone.history.navigate("orders", {trigger: true});
         },
         error: function(model, response) {
           console.log('Failed to cancel!');
@@ -443,7 +429,7 @@ App.Views.OrderDetails = Backbone.View.extend({
         contentType: "application/json",
         data: JSON.stringify(data),
         success: function() {
-          Backbone.history.navigate("/orders", {trigger: true});
+          Backbone.history.navigate("orders", {trigger: true});
         },
         error: function(xhr) {
           alert("Amend failed: " + xhr.responseText);
@@ -488,7 +474,7 @@ App.Views.ExecutionRowView = Backbone.View.extend({
     "click .details": "details"
   },
   details: function(e) {
-    Backbone.history.navigate("/executions/" + this.model.get("id"), {trigger: true});
+    Backbone.history.navigate("executions/" + this.model.get("id"), {trigger: true});
   }
 });
 
@@ -518,6 +504,15 @@ App.Views.OrderRowView = Backbone.View.extend({
 
   render: function() {
     this.$el.html(this.template(this.model.attributes));
+    this.$el.removeClass('danger warning success');
+    var status = this.model.get('ord_status');
+    if (status === '8') {
+      this.$el.addClass('danger');
+    } else if (status === '4') {
+      this.$el.addClass('warning');
+    } else if (status === '2') {
+      this.$el.addClass('success');
+    }
     return this;
   },
   events: {
@@ -529,7 +524,7 @@ App.Views.OrderRowView = Backbone.View.extend({
   },
 
   details: function(e) {
-    Backbone.history.navigate("/orders/" + this.model.get("id"), {trigger: true});
+    Backbone.history.navigate("orders/" + this.model.get("id"), {trigger: true});
   }
 });
 
@@ -568,21 +563,24 @@ App.Views.Executions = Backbone.View.extend({
   addAll: function() {
     this.$("tbody").empty();
 
-    var orderExecs = this.collection.filter(function(e) { return !e.get('is_leg'); });
+    var byId = function(m) { return m.get('id'); };
+    var orderExecs = _.sortBy(this.collection.filter(function(e) { return !e.get('is_leg'); }), byId);
     var legExecs = this.collection.filter(function(e) { return e.get('is_leg'); });
     var legsByClOrdID = _.groupBy(legExecs, function(e) { return e.get('clord_id'); });
 
     var self = this;
+    var parentClOrdIDs = {};
     _.each(orderExecs, function(exec) {
       self.addOne(exec);
-      var legs = legsByClOrdID[exec.get('clord_id')] || [];
+      parentClOrdIDs[exec.get('clord_id')] = true;
+      var legs = _.sortBy(legsByClOrdID[exec.get('clord_id')] || [], byId);
       _.each(legs, function(leg) { self.addOne(leg); });
     });
 
-    var attachedClOrdIDs = _.pluck(orderExecs, function(e) { return e.get('clord_id'); });
-    var orphanLegs = _.filter(legExecs, function(e) {
-      return !_.find(orderExecs, function(o) { return o.get('clord_id') === e.get('clord_id'); });
-    });
+    var orphanLegs = _.sortBy(
+      _.filter(legExecs, function(e) { return !parentClOrdIDs[e.get('clord_id')]; }),
+      byId
+    );
     _.each(orphanLegs, function(leg) { self.addOne(leg); });
 
     return this;
@@ -596,7 +594,7 @@ App.Views.Executions = Backbone.View.extend({
 
 App.Views.OrdersView = Backbone.View.extend({
   initialize: function() {
-    this.listenTo(this.collection, 'reset', this.addAll);
+    this.listenTo(this.collection, 'reset update change', this.addAll);
   },
 
   render: function() {
@@ -708,7 +706,7 @@ App.Views.SecurityDefinitionRequest = Backbone.View.extend({
 
 App.Views.OrderTicket = Backbone.View.extend({
   template: _.template(`
-<form class='form-inline' action='/order' method='POST' id='order-ticket'>
+<form class='form-inline' action='/orders' method='POST' id='order-ticket'>
   <p>
     <div class='form-group'>
       <label for='side'>Side</label>
@@ -956,25 +954,6 @@ App.Views.OrderTicket = Backbone.View.extend({
         this.$("#put_or_call").attr({disabled: false, required: true});
         this.$("#strike_price").attr({disabled: false, required: true});
         break;
-    }
-  },
-
-  updateOrdType: function() {
-    switch(this.$("#ordType option:selected").text()) {
-      case "Limit":
-        this.$("#limit").prop("disabled", false);
-        this.$("#limit").prop("required", true);
-        this.$("#stop").prop("disabled", true);
-        this.$("#stop").prop("required", false);
-      break;
-
-      case "Stop":
-        this.$("#limit").prop("disabled", true);
-        this.$("#limit").prop("required", false);
-        this.$("#stop").prop("disabled", false);
-        this.$("#stop").prop("required", true);
-      break;
-
     }
   },
 

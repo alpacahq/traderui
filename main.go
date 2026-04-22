@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -37,7 +38,10 @@ type SymbolsConfig struct {
 func loadSymbolsConfig(filePath string) (*SymbolsConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return &SymbolsConfig{}, nil
+		if errors.Is(err, os.ErrNotExist) {
+			return &SymbolsConfig{}, nil
+		}
+		return nil, fmt.Errorf("read %s: %w", filePath, err)
 	}
 	var cfg SymbolsConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -74,6 +78,9 @@ func newTradeClient(factory fixFactory, idGen oms.ClOrdIDGenerator, symbols *Sym
 }
 
 func (c tradeClient) SymbolsAsJSON() (string, error) {
+	if c.symbolsConfig == nil {
+		return "[]", nil
+	}
 	b, err := json.Marshal(c.symbolsConfig.Symbols)
 	return string(b), err
 }
@@ -367,16 +374,6 @@ func (c tradeClient) updateOrder(w http.ResponseWriter, r *http.Request) {
 	c.writeOrderJSON(w, order)
 }
 
-func (c tradeClient) getSymbols(w http.ResponseWriter, r *http.Request) {
-	b, err := json.Marshal(c.symbolsConfig.Symbols)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
-}
-
 var port = flag.String("port", "8080", "HTTP listen port")
 
 func (c tradeClient) newMultilegOrder(w http.ResponseWriter, r *http.Request) {
@@ -551,7 +548,6 @@ func main() {
 	router.HandleFunc("/multileg-orders", app.newMultilegOrder).Methods("POST")
 	router.HandleFunc("/multileg-orders/{id:[0-9]+}", app.updateMultilegOrder).Methods("PUT")
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
-	router.HandleFunc("/symbols", app.getSymbols).Methods("GET")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	router.HandleFunc("/", app.traderView)

@@ -67,28 +67,27 @@ func (a *FIXApplication) onOrderCancelReject(msg *quickfix.Message, sessionID qu
 	text := getStringTag(msg, tag.Text, "")
 	log.Printf("[WARN] Order Cancel Reject: %s", text)
 
-	var clOrdID field.ClOrdIDField
-	if err := msg.Body.Get(&clOrdID); err == nil {
-		if order, oErr := a.GetByClOrdID(clOrdID.String()); oErr == nil {
-			ordStatus := getStringTag(msg, tag.OrdStatus, "")
-			order.OrdStatus = ordStatus
-			if text != "" {
-				order.RejectionReason = text
-			}
-		}
+	lookup := getStringTag(msg, tag.OrigClOrdID, "")
+	if lookup == "" {
+		lookup = getStringTag(msg, tag.ClOrdID, "")
+	}
+	if lookup == "" {
+		return nil
 	}
 
-	if msg.Body.Has(tag.OrigClOrdID) {
-		origClOrdID := getStringTag(msg, tag.OrigClOrdID, "")
-		if origClOrdID != "" {
-			if order, oErr := a.GetByClOrdID(origClOrdID); oErr == nil {
-				ordStatus := getStringTag(msg, tag.OrdStatus, "")
-				order.OrdStatus = ordStatus
-				if text != "" {
-					order.RejectionReason = text
-				}
-			}
-		}
+	order, err := a.GetByClOrdID(lookup)
+	if err != nil {
+		return nil
+	}
+
+	if status := getStringTag(msg, tag.OrdStatus, ""); status != "" {
+		order.OrdStatus = status
+	}
+	if execType := getStringTag(msg, tag.ExecType, ""); execType != "" {
+		order.ExecType = execType
+	}
+	if text != "" {
+		order.RejectionReason = text
 	}
 
 	return nil
@@ -130,37 +129,6 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		return err
 	}
 
-	if msg.Body.Has(tag.OrdStatus) {
-		order.OrdStatus = getStringTag(msg, tag.OrdStatus, order.OrdStatus)
-	}
-	if msg.Body.Has(tag.ExecType) {
-		order.ExecType = getStringTag(msg, tag.ExecType, order.ExecType)
-	}
-	if msg.Body.Has(tag.OrderID) {
-		order.OrderID = getStringTag(msg, tag.OrderID, order.OrderID)
-	}
-
-	if order.OrdStatus == string(enum.OrdStatus_REJECTED) {
-		order.RejectionReason = getStringTag(msg, tag.Text, "")
-		if msg.Body.Has(tag.OrdRejReason) {
-			rejCode := getStringTag(msg, tag.OrdRejReason, "")
-			if rejCode != "" && order.RejectionReason != "" {
-				order.RejectionReason = order.RejectionReason + " (code: " + rejCode + ")"
-			} else if rejCode != "" {
-				order.RejectionReason = "Rejection code: " + rejCode
-			}
-		}
-		log.Printf("[WARN] Order REJECTED clOrdID=%s reason=%s", clOrdID.String(), order.RejectionReason)
-	}
-
-	if order.OrdStatus == string(enum.OrdStatus_CANCELED) {
-		reason := getStringTag(msg, tag.Text, "")
-		if reason != "" {
-			order.RejectionReason = reason
-		}
-		log.Printf("[INFO] Order CANCELED clOrdID=%s reason=%s", clOrdID.String(), reason)
-	}
-
 	isLegER := false
 	if msg.Body.Has(tag.MultiLegReportingType) {
 		var mlrt field.MultiLegReportingTypeField
@@ -170,6 +138,41 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		switch mlrt.Value() {
 		case enum.MultiLegReportingType_INDIVIDUAL_LEG_OF_A_MULTI_LEG_SECURITY:
 			isLegER = true
+		}
+	}
+
+	if !isLegER {
+		if msg.Body.Has(tag.OrdStatus) {
+			order.OrdStatus = getStringTag(msg, tag.OrdStatus, order.OrdStatus)
+		}
+		if msg.Body.Has(tag.ExecType) {
+			order.ExecType = getStringTag(msg, tag.ExecType, order.ExecType)
+		}
+		if msg.Body.Has(tag.OrderID) {
+			order.OrderID = getStringTag(msg, tag.OrderID, order.OrderID)
+		}
+
+		if order.OrdStatus == string(enum.OrdStatus_REJECTED) {
+			if txt := getStringTag(msg, tag.Text, ""); txt != "" {
+				order.RejectionReason = txt
+			}
+			if msg.Body.Has(tag.OrdRejReason) {
+				rejCode := getStringTag(msg, tag.OrdRejReason, "")
+				if rejCode != "" && order.RejectionReason != "" {
+					order.RejectionReason = order.RejectionReason + " (code: " + rejCode + ")"
+				} else if rejCode != "" {
+					order.RejectionReason = "Rejection code: " + rejCode
+				}
+			}
+			log.Printf("[WARN] Order REJECTED clOrdID=%s reason=%s", clOrdID.String(), order.RejectionReason)
+		}
+
+		if order.OrdStatus == string(enum.OrdStatus_CANCELED) {
+			reason := getStringTag(msg, tag.Text, "")
+			if reason != "" {
+				order.RejectionReason = reason
+			}
+			log.Printf("[INFO] Order CANCELED clOrdID=%s reason=%s", clOrdID.String(), reason)
 		}
 	}
 
