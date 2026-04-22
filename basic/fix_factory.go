@@ -51,7 +51,11 @@ func (FIXFactory) NewOrderSingle(order oms.Order) (msg quickfix.Messagable, err 
 func (FIXFactory) OrderCancelRequest(order oms.Order, clOrdID string) (msg quickfix.Messagable, err error) {
 	switch order.SessionID.BeginString {
 	case quickfix.BeginStringFIX42:
-		msg, err = cxl42(order, clOrdID)
+		if order.SecurityType == "MLEG" {
+			msg, err = multilegCxl42(order, clOrdID)
+		} else {
+			msg, err = cxl42(order, clOrdID)
+		}
 	default:
 		err = errors.New("Unhandled BeginString")
 	}
@@ -272,6 +276,23 @@ func cxl42(ord oms.Order, clOrdID string) (quickfix.Messagable, error) {
 	cxl.Set(field.NewAccount(ord.Account))
 
 	return cxl, nil
+}
+
+func multilegCxl42(ord oms.Order, clOrdID string) (quickfix.Messagable, error) {
+	cxl := fix42cxl.New(
+		field.NewOrigClOrdID(ord.ClOrdID),
+		field.NewClOrdID(clOrdID),
+		field.NewSymbol(ord.Symbol),
+		field.NewSide(ord.Side),
+		field.NewTransactTime(time.Now()),
+	)
+	cxl.Set(field.NewAccount(ord.Account))
+	msg := cxl.ToMessage()
+	msg.Body.Set(field.NewSecurityType("MLEG"))
+	if len(ord.Legs) > 0 {
+		msg.Body.SetGroup(buildLegsGroup(ord.Legs))
+	}
+	return msg, nil
 }
 
 func nos43(ord oms.Order) (quickfix.Messagable, error) {

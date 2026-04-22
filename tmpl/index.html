@@ -2,7 +2,12 @@
   <head>
     <title>TraderUI</title>
     <link rel="stylesheet" href="assets/css/bootstrap/3.3.6/css/bootstrap.min.css">
-
+    <style>
+      #session-status li { padding: 15px 10px; font-size: 12px; }
+      #session-status .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+      #session-status .dot-up { background: #5cb85c; }
+      #session-status .dot-down { background: #d9534f; }
+    </style>
   </head>
   <body>
     <nav class="navbar navbar-default">
@@ -18,6 +23,7 @@
             <li id="nav-multileg"><a href="/#multileg" data-internal='true'>Multileg Orders</a></li>
             <li id="nav-secdef"><a href="/#secdefs" data-internal='true'>Security Definitions</a></li>
           </ul>
+          <ul class="nav navbar-nav navbar-right" id="session-status"></ul>
         </div>
       </div>
     </nav>

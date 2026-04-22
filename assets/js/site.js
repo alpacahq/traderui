@@ -1,7 +1,7 @@
 setInterval(function() {
   App.orders.fetch({reset: true});
   App.executions.fetch({reset: true});
-  
+  App.refreshSessionStatus();
 }, 1000);
 
 var App = new( Backbone.View.extend({
@@ -33,6 +33,8 @@ var App = new( Backbone.View.extend({
     this.orders = new App.Collections.Orders(options.orders);
     this.executions = new App.Collections.Executions(options.executions);
     this.router = new App.Router();
+
+    this.refreshSessionStatus();
 
     Backbone.history.start({pushState: false});
   },
@@ -80,6 +82,20 @@ var App = new( Backbone.View.extend({
     $("#nav-execution").removeClass("active");
     $("#nav-multileg").removeClass("active");
     $("#nav-secdef").addClass("active");
+  },
+
+  refreshSessionStatus: function() {
+    $.getJSON('/session-status').done(function(status) {
+      var $el = $('#session-status');
+      $el.empty();
+      _.each(_.keys(status).sort(), function(id) {
+        var up = status[id];
+        $el.append(
+          '<li><span class="dot ' + (up ? 'dot-up' : 'dot-down') + '"></span>'
+          + _.escape(id) + ' <span class="text-muted">' + (up ? 'logged on' : 'down') + '</span></li>'
+        );
+      });
+    });
   },
 
   showOrderDetails: function(id) {
@@ -341,6 +357,34 @@ App.Views.OrderDetails = Backbone.View.extend({
   </div>
   <% } %>
 
+  <% if (legs && legs.length) { %>
+  <div class="form-group">
+    <label class="col-sm-2 control-label">Legs</label>
+    <div class="col-sm-10">
+      <table class="table table-condensed">
+        <thead><tr>
+          <th>#</th><th>Symbol</th><th>CFI</th><th>Side</th><th>Ratio</th>
+          <th>Strike</th><th>Maturity</th><th>Pos Effect</th>
+        </tr></thead>
+        <tbody>
+          <% _.each(legs, function(l, i){ %>
+          <tr>
+            <td><%= i + 1 %></td>
+            <td><%= l.leg_symbol %></td>
+            <td><%= l.leg_cfi_code %></td>
+            <td><%= App.prettySide(l.leg_side) %></td>
+            <td><%= l.leg_ratio_qty %></td>
+            <td><%= l.leg_strike_price || "" %></td>
+            <td><%= l.leg_maturity_date || "" %></td>
+            <td><%= l.leg_position_effect %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <% } %>
+
   <% if (open == "0") { %>
   <div class="form-group">
     <label class="col-sm-2 control-label">Quantity</label>
@@ -398,14 +442,18 @@ App.Views.OrderDetails = Backbone.View.extend({
     },
 
     'click .cancel': function(e) {
-      this.model.destroy({
+      var attrs = this.model.attributes;
+      var url = (attrs.security_type === "MLEG")
+        ? "/multileg-orders/" + attrs.id
+        : "/orders/" + attrs.id;
+      $.ajax({
+        type: "DELETE",
+        url: url,
         success: function() {
           Backbone.history.navigate("orders", {trigger: true});
         },
-        error: function(model, response) {
-          console.log('Failed to cancel!');
-          console.log(model);
-          console.log(response);
+        error: function(xhr) {
+          alert("Cancel failed: " + xhr.responseText);
         }
       });
     },
@@ -520,7 +568,17 @@ App.Views.OrderRowView = Backbone.View.extend({
     "click .details": "details"
   },
   cancel: function(e) {
-    this.model.destroy();
+    var attrs = this.model.attributes;
+    var url = (attrs.security_type === "MLEG")
+      ? "/multileg-orders/" + attrs.id
+      : "/orders/" + attrs.id;
+    $.ajax({
+      type: "DELETE",
+      url: url,
+      error: function(xhr) {
+        alert("Cancel failed: " + xhr.responseText);
+      }
+    });
   },
 
   details: function(e) {
@@ -740,8 +798,9 @@ App.Views.OrderTicket = Backbone.View.extend({
     <div class='form-group'>
       <label for='symbol_select'>Symbol</label>
       <select class='form-control' name='symbol_select' id='symbol_select'>
-        <% _.each(symbols, function(s){ %>
-          <option value='<%= s.symbol %>'
+        <% _.each(symbols, function(s, i){ %>
+          <option value='sym-<%= i %>'
+            data-symbol='<%= s.symbol %>'
             data-type='<%= s.type %>'
             data-cfi='<%= s.cfi_code || "" %>'
             data-strike='<%= s.strike_price || "" %>'
@@ -862,12 +921,13 @@ App.Views.OrderTicket = Backbone.View.extend({
 
   submit: function(e) {
     e.preventDefault();
-    var selVal = this.$('#symbol_select').val();
+    var sel = this.$('#symbol_select');
+    var selVal = sel.val();
     var symbol;
     if (selVal === '__custom__') {
       symbol = this.$('input[name=symbol]').val();
     } else {
-      symbol = selVal;
+      symbol = sel.find(':selected').data('symbol') || selVal;
     }
 
     var order = new App.Models.Order();
@@ -890,7 +950,13 @@ App.Views.OrderTicket = Backbone.View.extend({
       strike_price:         this.$('input[name=strike_price]').val(),
     });
 
+    var self = this;
     order.save(null, {
+      success: function() {
+        self.$('input[name=quantity]').val('');
+        self.$('input[name=price]').val('');
+        self.$('input[name=stopPrice]').val('');
+      },
       error: function(model, response) {
         alert("Order rejected: " + response.responseText);
       }
@@ -1186,7 +1252,12 @@ App.Views.MultilegTicket = Backbone.View.extend({
       session_id: this.$('#ml-session').val(),
       legs:       legs
     });
+    var self = this;
     order.save(null, {
+      success: function() {
+        self.$('#ml-quantity').val('');
+        self.$('#ml-limit').val('');
+      },
       error: function(model, response) {
         alert("Error: " + response.responseText);
       }

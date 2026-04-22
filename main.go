@@ -59,9 +59,14 @@ type fixFactory interface {
 	MultilegOrderCancelReplace(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
 }
 
+type sessionStatusSource interface {
+	SessionStatus() map[string]bool
+}
+
 type tradeClient struct {
 	SessionIDs    map[string]quickfix.SessionID
 	symbolsConfig *SymbolsConfig
+	statusSrc     sessionStatusSource
 	fixFactory
 	*oms.OrderManager
 }
@@ -96,6 +101,15 @@ func (c tradeClient) SessionsAsJSON() (string, error) {
 	return string(b), err
 }
 
+func (c tradeClient) getSessionStatus(w http.ResponseWriter, r *http.Request) {
+	status := map[string]bool{}
+	if c.statusSrc != nil {
+		status = c.statusSrc.SessionStatus()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(status)
+}
+
 func (c tradeClient) OrdersAsJSON() (string, error) {
 	c.RLock()
 	defer c.RUnlock()
@@ -124,7 +138,7 @@ func (c tradeClient) fetchRequestedOrder(r *http.Request) (*oms.Order, error) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("invalid order id %q: %w", vars["id"], err)
 	}
 
 	return c.Get(id)
@@ -134,7 +148,7 @@ func (c tradeClient) fetchRequestedExecution(r *http.Request) (*oms.Execution, e
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("invalid execution id %q: %w", vars["id"], err)
 	}
 
 	return c.GetExecution(id)
@@ -307,11 +321,13 @@ func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = quickfix.SendToTarget(msg, order.SessionID)
-
-	if err != nil {
+	if err = quickfix.SendToTarget(msg, order.SessionID); err != nil {
+		log.Printf("[ERROR] %v\n", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+
+	c.writeOrderJSON(w, &order)
 }
 
 func (c tradeClient) updateOrder(w http.ResponseWriter, r *http.Request) {
@@ -517,12 +533,12 @@ func main() {
 
 	logFactory := NewFancyLog()
 
-	var fixApp quickfix.Application
 	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator), symbolsCfg)
-	fixApp = &basic.FIXApplication{
+	fixApp := &basic.FIXApplication{
 		SessionIDs:   app.SessionIDs,
 		OrderManager: app.OrderManager,
 	}
+	app.statusSrc = fixApp
 
 	initiator, err := quickfix.NewInitiator(fixApp, quickfix.NewMemoryStoreFactory(), appSettings, logFactory)
 	if err != nil {
@@ -547,7 +563,9 @@ func main() {
 
 	router.HandleFunc("/multileg-orders", app.newMultilegOrder).Methods("POST")
 	router.HandleFunc("/multileg-orders/{id:[0-9]+}", app.updateMultilegOrder).Methods("PUT")
+	router.HandleFunc("/multileg-orders/{id:[0-9]+}", app.deleteOrder).Methods("DELETE")
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
+	router.HandleFunc("/session-status", app.getSessionStatus).Methods("GET")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	router.HandleFunc("/", app.traderView)

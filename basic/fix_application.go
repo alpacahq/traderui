@@ -2,6 +2,7 @@ package basic
 
 import (
 	"log"
+	"sync"
 
 	"github.com/quickfixgo/enum"
 	"github.com/quickfixgo/field"
@@ -15,13 +16,42 @@ import (
 type FIXApplication struct {
 	SessionIDs map[string]quickfix.SessionID
 	*oms.OrderManager
+
+	statusMu  sync.RWMutex
+	loggedOn  map[string]bool
 }
 
-// OnLogon is ignored
-func (a *FIXApplication) OnLogon(sessionID quickfix.SessionID) {}
+// SessionStatus reports whether each known session is currently logged on.
+func (a *FIXApplication) SessionStatus() map[string]bool {
+	a.statusMu.RLock()
+	defer a.statusMu.RUnlock()
+	out := make(map[string]bool, len(a.SessionIDs))
+	for id := range a.SessionIDs {
+		out[id] = a.loggedOn[id]
+	}
+	return out
+}
 
-// OnLogout is ignored
-func (a *FIXApplication) OnLogout(sessionID quickfix.SessionID) {}
+func (a *FIXApplication) setLoggedOn(sessionID quickfix.SessionID, on bool) {
+	a.statusMu.Lock()
+	if a.loggedOn == nil {
+		a.loggedOn = make(map[string]bool)
+	}
+	a.loggedOn[sessionID.String()] = on
+	a.statusMu.Unlock()
+}
+
+// OnLogon records the session as logged on.
+func (a *FIXApplication) OnLogon(sessionID quickfix.SessionID) {
+	a.setLoggedOn(sessionID, true)
+	log.Printf("[INFO] session logon: %s", sessionID)
+}
+
+// OnLogout records the session as logged out.
+func (a *FIXApplication) OnLogout(sessionID quickfix.SessionID) {
+	a.setLoggedOn(sessionID, false)
+	log.Printf("[INFO] session logout: %s", sessionID)
+}
 
 // ToAdmin is ignored
 func (a *FIXApplication) ToAdmin(msg *quickfix.Message, sessionID quickfix.SessionID) {}
@@ -29,6 +59,7 @@ func (a *FIXApplication) ToAdmin(msg *quickfix.Message, sessionID quickfix.Sessi
 // OnCreate initialized SessionIDs
 func (a *FIXApplication) OnCreate(sessionID quickfix.SessionID) {
 	a.SessionIDs[sessionID.String()] = sessionID
+	a.setLoggedOn(sessionID, false)
 }
 
 // FromAdmin is ignored
@@ -173,6 +204,15 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 				order.RejectionReason = reason
 			}
 			log.Printf("[INFO] Order CANCELED clOrdID=%s reason=%s", clOrdID.String(), reason)
+		}
+
+		switch order.ExecType {
+		case string(enum.ExecType_NEW),
+			string(enum.ExecType_REPLACED),
+			string(enum.ExecType_PARTIAL_FILL),
+			string(enum.ExecType_FILL),
+			string(enum.ExecType_TRADE):
+			order.RejectionReason = ""
 		}
 	}
 
