@@ -158,6 +158,7 @@ func buildLegsGroup(legs []oms.Leg) *quickfix.RepeatingGroup {
 			quickfix.GroupElement(tag.LegSymbol),
 			quickfix.GroupElement(tag.LegRefID),
 			quickfix.GroupElement(tag.LegCFICode),
+			quickfix.GroupElement(tag.LegSecurityType),
 			quickfix.GroupElement(tag.LegStrikePrice),
 			quickfix.GroupElement(tag.LegMaturityDate),
 			quickfix.GroupElement(tag.LegSide),
@@ -171,6 +172,7 @@ func buildLegsGroup(legs []oms.Leg) *quickfix.RepeatingGroup {
 		g.SetField(tag.LegSymbol, quickfix.FIXString(leg.Symbol))
 		g.SetField(tag.LegRefID, quickfix.FIXString(strconv.Itoa(i)))
 		g.SetField(tag.LegCFICode, quickfix.FIXString(leg.CFICode))
+		g.SetField(tag.LegSecurityType, quickfix.FIXString(legSecurityType(leg)))
 		if leg.IsOption() {
 			strikePrice, _ := decimal.NewFromString(leg.StrikePrice)
 			g.SetField(tag.LegStrikePrice, quickfix.FIXDecimal{Decimal: strikePrice, Scale: 0})
@@ -179,10 +181,28 @@ func buildLegsGroup(legs []oms.Leg) *quickfix.RepeatingGroup {
 		g.SetField(tag.LegSide, quickfix.FIXString(leg.Side))
 		ratioQty := decimal.NewFromInt(int64(leg.RatioQty))
 		g.SetField(tag.LegRatioQty, quickfix.FIXDecimal{Decimal: ratioQty, Scale: 0})
-		g.SetField(tag.LegPositionEffect, quickfix.FIXString(leg.PositionEffect))
+		// PositionEffect is an options concept; only emit it for option legs.
+		if leg.IsOption() && leg.PositionEffect != "" {
+			g.SetField(tag.LegPositionEffect, quickfix.FIXString(leg.PositionEffect))
+		}
 	}
 
 	return group
+}
+
+// legSecurityType maps a leg's CFICode to the FIX LegSecurityType (tag 609)
+// value expected by most counterparties: OPT for calls/puts, CS for common
+// stock. Falls back to empty if the CFICode is unknown so the counterparty
+// can reject explicitly rather than silently mis-route.
+func legSecurityType(leg oms.Leg) string {
+	if leg.IsOption() {
+		return "OPT"
+	}
+	switch leg.CFICode {
+	case "ES", "CS":
+		return "CS"
+	}
+	return ""
 }
 
 func populateOrder(genMessage quickfix.Messagable, ord oms.Order) (quickfix.Messagable, error) {

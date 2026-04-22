@@ -1207,12 +1207,23 @@ App.Views.MultilegTicket = Backbone.View.extend({
 `),
 
   buildLegPresetOptions: function(root) {
-    var optSymbols = _.filter(this.model.get('symbols') || [], function(s) {
+    var allSymbols = this.model.get('symbols') || [];
+    var stockSymbol = _.find(allSymbols, function(s) {
+      return s.type === 'CS' && s.symbol === root;
+    });
+    var optSymbols = _.filter(allSymbols, function(s) {
       return s.type === 'OPT' && s.symbol === root;
     });
     var optionsHtml = '<option value="">-- Manual --</option>';
+    if (stockSymbol) {
+      optionsHtml += '<option value="' + stockSymbol.symbol + ' (Stock)"'
+        + ' data-type="CS"'
+        + ' data-cfi="ES"'
+        + '>' + stockSymbol.symbol + ' (Stock)</option>';
+    }
     _.each(optSymbols, function(s) {
       optionsHtml += '<option value="' + s.description + '"'
+        + ' data-type="OPT"'
         + ' data-cfi="' + (s.cfi_code || '') + '"'
         + ' data-strike="' + (s.strike_price || '') + '"'
         + ' data-maturity="' + (s.maturity_date || '') + '"'
@@ -1226,7 +1237,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
       '<tr class="leg-row">'
       + '<td><select class="form-control input-sm leg-preset">' + this.buildLegPresetOptions(root) + '</select></td>'
       + '<td><select class="form-control input-sm leg-cfi">'
-      +   '<option value="OC">Call</option><option value="OP">Put</option><option value="ES">Equity</option>'
+      +   '<option value="OC">Call</option><option value="OP">Put</option><option value="ES">Stock</option>'
       + '</select></td>'
       + '<td><select class="form-control input-sm leg-side">'
       +   '<option value="1">Buy</option><option value="2">Sell</option>'
@@ -1284,22 +1295,44 @@ App.Views.MultilegTicket = Backbone.View.extend({
 
   updateLegFields: function(e) {
     var row = $(e.target).closest('tr');
-    var isOption = ($(e.target).val() === "OC" || $(e.target).val() === "OP");
+    var cfi = $(e.target).val();
+    var isOption = (cfi === "OC" || cfi === "OP");
+    var isStock = (cfi === "ES");
     row.find('.leg-strike').prop('disabled', !isOption).prop('required', isOption);
     row.find('.leg-maturity').prop('disabled', !isOption).prop('required', isOption);
+    if (isStock) {
+      row.find('.leg-strike').val('');
+      row.find('.leg-maturity').val('');
+    }
+    row.find('.leg-poseffect').prop('disabled', isStock);
   },
 
   updateLegPreset: function(e) {
     var row = $(e.target).closest('tr');
     var opt = $(e.target).find(':selected');
+    var presetType = opt.data('type');
     var cfi = opt.data('cfi');
     var strike = opt.data('strike');
     var maturity = opt.data('maturity');
+
+    if (presetType === 'CS') {
+      row.find('.leg-cfi').val('ES');
+      row.find('.leg-strike').val('').prop('disabled', true).prop('required', false);
+      row.find('.leg-maturity').val('').prop('disabled', true).prop('required', false);
+      row.find('.leg-poseffect').prop('disabled', true);
+      // Default equity leg ratio to 100 shares per contract (covered-call
+      // convention). User can override.
+      if (row.find('.leg-ratio').val() === '1') {
+        row.find('.leg-ratio').val('100');
+      }
+      return;
+    }
 
     if (cfi) {
       row.find('.leg-cfi').val(cfi);
       row.find('.leg-strike').val(strike || '').prop('disabled', false).prop('required', true);
       row.find('.leg-maturity').val(maturity || '').prop('disabled', false).prop('required', true);
+      row.find('.leg-poseffect').prop('disabled', false);
     }
   },
 
@@ -1309,14 +1342,16 @@ App.Views.MultilegTicket = Backbone.View.extend({
     var legs = [];
     this.$('.leg-row').each(function() {
       var row = $(this);
+      var cfi = row.find('.leg-cfi').val();
+      var isOption = (cfi === "OC" || cfi === "OP");
       legs.push({
         leg_symbol:          symbol,
-        leg_cfi_code:        row.find('.leg-cfi').val(),
+        leg_cfi_code:        cfi,
         leg_side:            row.find('.leg-side').val(),
         leg_ratio_qty:       parseInt(row.find('.leg-ratio').val()) || 1,
-        leg_strike_price:    row.find('.leg-strike').val() || "",
-        leg_maturity_date:   row.find('.leg-maturity').val() || "",
-        leg_position_effect: row.find('.leg-poseffect').val()
+        leg_strike_price:    isOption ? (row.find('.leg-strike').val() || "") : "",
+        leg_maturity_date:   isOption ? (row.find('.leg-maturity').val() || "") : "",
+        leg_position_effect: isOption ? row.find('.leg-poseffect').val() : ""
       });
     });
 
