@@ -31,8 +31,11 @@ var App = new( Backbone.View.extend({
   },
 
   start: function(options) {
+    this.symbols = options.symbols || [];
+
     this.orderTicket = new App.Models.OrderTicket({
-      session_ids: options.session_ids  
+      session_ids: options.session_ids,
+      symbols: this.symbols
     });
 
     this.securityDefinitionForm = new App.Models.SecurityDefinitionForm({
@@ -184,32 +187,45 @@ App.Collections.Executions = Backbone.Collection.extend({
 
 App.Views.ExecutionDetails = Backbone.View.extend({
   template: _.template(`
-<dl class="dl-horizontal">
-  <dt>ID</dt><dd><%= id %></dd> 
-	<dt>Symbol</dt><dd><%= symbol %></dd>
-	<dt>Security Type</dt><dd><%= App.prettySecurityType(security_type) %></dd>
-	<dt>Quantity</dt><dd><%= quantity %></dd>
-	<dt>Session</dt><dd><%= session_id %></dd>
-  <dt>Side</dt><dd><%= App.prettySide(side) %></dd>
-	<dt>Price</dt><dd><%= price %></dd>
-	<% if (security_type === "OPT") { %>
-	<dt>Put or Call</dt><dd><%= App.prettyPutOrCall(put_or_call) %></dd>
-	<dt>Strike Price</dt><dd><%= strike_price %></dd>
-	<dt>Maturity</dt><dd><%= maturity_month_year %></dd>
-	<% } %>
-</dl>
-
+<div class="panel panel-<%= is_leg ? 'info' : 'default' %>">
+  <div class="panel-heading">
+    <h4>
+      <% if (is_leg) { %>
+        <span class="label label-info">Leg Fill</span>
+      <% } else { %>
+        <span class="label label-success">Order Fill</span>
+      <% } %>
+      Execution #<%= id %>
+    </h4>
+  </div>
+  <div class="panel-body">
+    <dl class="dl-horizontal">
+      <dt>Exec ID</dt><dd><%= exec_id || "—" %></dd>
+      <dt>Order ID</dt><dd><%= order_id || "—" %></dd>
+      <dt>ClOrdID</dt><dd><%= clord_id || "—" %></dd>
+      <dt>Symbol</dt><dd><%= symbol %></dd>
+      <dt>Security Type</dt><dd><%= App.prettySecurityType(security_type) %></dd>
+      <dt>Side</dt><dd><%= App.prettySide(side) %></dd>
+      <dt>Quantity</dt><dd><%= quantity %></dd>
+      <dt>Price</dt><dd><%= price %></dd>
+      <dt>Status</dt><dd><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></dd>
+      <% if (security_type === "OPT") { %>
+      <dt>Put or Call</dt><dd><%= App.prettyPutOrCall(put_or_call) %></dd>
+      <dt>Strike Price</dt><dd><%= strike_price %></dd>
+      <dt>Maturity</dt><dd><%= maturity_month_year %></dd>
+      <% } %>
+      <dt>Session</dt><dd><%= session_id %></dd>
+    </dl>
+  </div>
 </div>
-  <a href='#' data-internal='true'>Back</a>
-</div>
+<button class="btn btn-info back">Back</button>
 `),
   render: function() {
     this.$el.html(this.template(this.model.attributes));
     return this;
   },
   events: {
-    'click a[data-internal]': function(e) {
-      e.preventDefault();
+    'click .back': function(e) {
       window.history.back();
     }
   }
@@ -322,6 +338,20 @@ App.Views.OrderDetails = Backbone.View.extend({
       <p class="form-control-static"><%= strike_price %></p>
     </div>
   </div>
+  <div class="form-group">
+    <label class="col-sm-2 control-label">Status</label>
+    <div class="col-sm-10">
+      <p class="form-control-static"><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></p>
+    </div>
+  </div>
+  <% if (rejection_reason) { %>
+  <div class="form-group">
+    <label class="col-sm-2 control-label">Rejection Reason</label>
+    <div class="col-sm-10">
+      <p class="form-control-static text-danger"><strong><%= rejection_reason %></strong></p>
+    </div>
+  </div>
+  <% } %>
 
   <% if (open == "0") { %>
   <div class="form-group">
@@ -427,21 +457,31 @@ App.Views.ExecutionRowView = Backbone.View.extend({
   tagName: 'tr',
   template: _.template(`
 <td>
-<button class="btn btn-info details">Details</button>
+<button class="btn btn-info btn-xs details">Details</button>
 </td>
-<td><%= symbol %></td>
+<td>
+  <% if (is_leg) { %>
+    <span class="label label-info">Leg</span>
+  <% } else { %>
+    <span class="label label-success">Order</span>
+  <% } %>
+</td>
+<td><%= is_leg ? "↳ " + symbol : symbol %></td>
 <td><%= App.prettySecurityType(security_type) %></td>
 <td><%= quantity %></td>
 <td><%= App.prettySide(side) %></td>
 <td><%= price %></td>
 <td><%= security_type === "OPT" ? App.prettyPutOrCall(put_or_call) : "" %></td>
 <td><%= strike_price || "" %></td>
+<td><%= clord_id || "" %></td>
 <td><%= session_id %></td>
 `),
 
-
   render: function() {
     this.$el.html(this.template(this.model.attributes));
+    if (this.model.get('is_leg')) {
+      this.$el.css('background-color', '#f0f8ff');
+    }
     return this;
   },
   events: {
@@ -471,6 +511,8 @@ App.Views.OrderRowView = Backbone.View.extend({
 <td><%= price %></td>
 <td><%= stop_price %></td>
 <td><%= avg_px %></td>
+<td><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></td>
+<td><% if(rejection_reason){ %><span class="text-danger" title="<%= rejection_reason %>"><%= rejection_reason %></span><% } %></td>
 <td><%= session_id %></td>
 `),
 
@@ -498,10 +540,11 @@ App.Views.Executions = Backbone.View.extend({
 
   render: function() {
     this.$el.html(`
-<table class='table table-striped' id='executions'>
+<table class='table' id='executions'>
   <thead>
     <tr>
       <th></th>
+      <th>Type</th>
       <th>Symbol</th>
       <th>Security Type</th>
       <th>Quantity</th>
@@ -509,6 +552,7 @@ App.Views.Executions = Backbone.View.extend({
       <th>Price</th>
       <th>Put/Call</th>
       <th>Strike</th>
+      <th>ClOrdID</th>
       <th>Session</th>
     </tr>
   </thead>
@@ -523,7 +567,24 @@ App.Views.Executions = Backbone.View.extend({
 
   addAll: function() {
     this.$("tbody").empty();
-    this.collection.forEach(this.addOne, this);
+
+    var orderExecs = this.collection.filter(function(e) { return !e.get('is_leg'); });
+    var legExecs = this.collection.filter(function(e) { return e.get('is_leg'); });
+    var legsByClOrdID = _.groupBy(legExecs, function(e) { return e.get('clord_id'); });
+
+    var self = this;
+    _.each(orderExecs, function(exec) {
+      self.addOne(exec);
+      var legs = legsByClOrdID[exec.get('clord_id')] || [];
+      _.each(legs, function(leg) { self.addOne(leg); });
+    });
+
+    var attachedClOrdIDs = _.pluck(orderExecs, function(e) { return e.get('clord_id'); });
+    var orphanLegs = _.filter(legExecs, function(e) {
+      return !_.find(orderExecs, function(o) { return o.get('clord_id') === e.get('clord_id'); });
+    });
+    _.each(orphanLegs, function(leg) { self.addOne(leg); });
+
     return this;
   },
 
@@ -555,6 +616,8 @@ App.Views.OrdersView = Backbone.View.extend({
       <th>Limit</th>
       <th>Stop</th>
       <th>AvgPx</th>
+      <th>Status</th>
+      <th>Rejection Reason</th>
       <th>Session</th>
     </tr>
   </thead>
@@ -677,13 +740,30 @@ App.Views.OrderTicket = Backbone.View.extend({
     </div>
 
     <div class='form-group'>
-      <label for='symbol'>Symbol</label>
-      <input type='text' class='form-control' name='symbol' placeholder='Symbol' required>
+      <label for='symbol_select'>Symbol</label>
+      <select class='form-control' name='symbol_select' id='symbol_select'>
+        <% _.each(symbols, function(s){ %>
+          <option value='<%= s.symbol %>'
+            data-type='<%= s.type %>'
+            data-cfi='<%= s.cfi_code || "" %>'
+            data-strike='<%= s.strike_price || "" %>'
+            data-maturity-date='<%= s.maturity_date || "" %>'
+            data-maturity-my='<%= s.maturity_month_year || "" %>'
+            data-desc='<%= s.description || "" %>'
+          ><%= s.description %></option>
+        <% }); %>
+        <option value='__custom__'>-- Custom Symbol --</option>
+      </select>
+    </div>
+
+    <div class='form-group' id='custom-symbol-group' style='display:none'>
+      <label for='symbol'>Custom Symbol</label>
+      <input type='text' class='form-control' name='symbol' placeholder='Symbol'>
     </div>
 
     <div class='form-group'>
       <label for='security_desc'>Security Desc</label>
-      <input type='text' class='form-control' name='security_desc' placeholder='Security Desc'>
+      <input type='text' class='form-control' name='security_desc' id='security_desc' placeholder='Security Desc'>
     </div>
   </p>
   <p>
@@ -778,16 +858,25 @@ App.Views.OrderTicket = Backbone.View.extend({
   events: {
     "change #ordType": "updateOrdType",
     "change #security_type": "updateSecurityType",
+    "change #symbol_select": "updateSymbolSelect",
     submit: "submit"
   },
 
   submit: function(e) {
     e.preventDefault();
+    var selVal = this.$('#symbol_select').val();
+    var symbol;
+    if (selVal === '__custom__') {
+      symbol = this.$('input[name=symbol]').val();
+    } else {
+      symbol = selVal;
+    }
+
     var order = new App.Models.Order();
     order.set({
       side:                 this.$('select[name=side]').val(),
       quantity:             this.$('input[name=quantity]').val(),
-      symbol:               this.$('input[name=symbol]').val(),
+      symbol:               symbol,
       ord_type:             this.$('select[name=ordType]').val(),
       price:                this.$('input[name=price]').val(),
       stop_price:           this.$('input[name=stopPrice]').val(),
@@ -796,14 +885,55 @@ App.Views.OrderTicket = Backbone.View.extend({
       open_close:           this.$('select[name=openClose]').val(),
       session_id:           this.$('select[name=session]').val(),
       security_type:        this.$('select[name=security_type]').val(),
-      security_desc:        this.$('input[name=security_desc]').val(),
+      security_desc:        this.$('#security_desc').val(),
       maturity_month_year:  this.$('input[name=maturity_month_year]').val(),
       maturity_day:         parseInt(this.$('input[name=maturity_day]').val()),
       put_or_call:          this.$('select[name=put_or_call]').val(),
       strike_price:         this.$('input[name=strike_price]').val(),
     });
 
-    order.save();
+    order.save(null, {
+      error: function(model, response) {
+        alert("Order rejected: " + response.responseText);
+      }
+    });
+  },
+
+  updateSymbolSelect: function() {
+    var sel = this.$('#symbol_select');
+    var val = sel.val();
+    if (val === '__custom__') {
+      this.$('#custom-symbol-group').show();
+      this.$('input[name=symbol]').prop('required', true);
+      return;
+    }
+    this.$('#custom-symbol-group').hide();
+    this.$('input[name=symbol]').prop('required', false);
+
+    var opt = sel.find(':selected');
+    var type = opt.data('type');
+    var cfi = opt.data('cfi');
+    var strike = opt.data('strike');
+    var matDate = opt.data('maturity-date');
+    var matMY = opt.data('maturity-my');
+    var desc = opt.data('desc');
+
+    this.$('#security_desc').val(desc || '');
+
+    if (type === 'OPT') {
+      this.$('#security_type').val('OPT').trigger('change');
+      this.$('#maturity_month_year').val(matMY || '');
+      this.$('#strike_price').val(strike || '');
+      if (cfi === 'OC') {
+        this.$('#put_or_call').val('1');
+      } else if (cfi === 'OP') {
+        this.$('#put_or_call').val('0');
+      }
+    } else if (type === 'FUT') {
+      this.$('#security_type').val('FUT').trigger('change');
+    } else {
+      this.$('#security_type').val('CS').trigger('change');
+    }
   },
 
   updateSecurityType: function() {
@@ -887,7 +1017,12 @@ App.Views.MultilegTicket = Backbone.View.extend({
   <p>
     <div class='form-group'>
       <label for='ml-symbol'>Symbol (root)</label>
-      <input type='text' class='form-control' name='symbol' id='ml-symbol' placeholder='e.g. AAPL' required>
+      <select class='form-control' name='symbol' id='ml-symbol'>
+        <% var underlyings = _.filter(symbols, function(s) { return s.type !== 'OPT'; }); %>
+        <% _.each(underlyings, function(s){ %>
+          <option value='<%= s.symbol %>'><%= s.description %></option>
+        <% }); %>
+      </select>
     </div>
 
     <div class='form-group'>
@@ -937,6 +1072,7 @@ App.Views.MultilegTicket = Backbone.View.extend({
   <table class='table table-condensed' id='legs-table'>
     <thead>
       <tr>
+        <th>Preset</th>
         <th>CFI Code</th>
         <th>Side</th>
         <th>Ratio Qty</th>
@@ -954,33 +1090,39 @@ App.Views.MultilegTicket = Backbone.View.extend({
 </form>
 `),
 
-  legRowTemplate: _.template(`
-<tr class='leg-row'>
-  <td>
-    <select class='form-control input-sm leg-cfi'>
-      <option value='OC'>Call</option>
-      <option value='OP'>Put</option>
-      <option value='ES'>Equity</option>
-    </select>
-  </td>
-  <td>
-    <select class='form-control input-sm leg-side'>
-      <option value='1'>Buy</option>
-      <option value='2'>Sell</option>
-    </select>
-  </td>
-  <td><input type='number' class='form-control input-sm leg-ratio' value='1' min='1'></td>
-  <td><input type='number' step='.01' class='form-control input-sm leg-strike' placeholder='Strike'></td>
-  <td><input type='text' class='form-control input-sm leg-maturity' placeholder='YYYYMMDD'></td>
-  <td>
-    <select class='form-control input-sm leg-poseffect'>
-      <option value='O'>Open</option>
-      <option value='C'>Close</option>
-    </select>
-  </td>
-  <td><button type='button' class='btn btn-danger btn-xs remove-leg'>X</button></td>
-</tr>
-`),
+  legRowTemplate: null,
+  getLegRowTemplate: function() {
+    if (!this._legTpl) {
+      var optSymbols = _.filter(App.symbols || [], function(s) { return s.type === 'OPT'; });
+      var optionsHtml = '<option value="">-- Manual --</option>';
+      _.each(optSymbols, function(s) {
+        optionsHtml += '<option value="' + s.description + '"'
+          + ' data-cfi="' + (s.cfi_code || '') + '"'
+          + ' data-strike="' + (s.strike_price || '') + '"'
+          + ' data-maturity="' + (s.maturity_date || '') + '"'
+          + '>' + s.description + '</option>';
+      });
+      this._legTpl = _.template(
+        '<tr class="leg-row">'
+        + '<td><select class="form-control input-sm leg-preset">' + optionsHtml + '</select></td>'
+        + '<td><select class="form-control input-sm leg-cfi">'
+        +   '<option value="OC">Call</option><option value="OP">Put</option><option value="ES">Equity</option>'
+        + '</select></td>'
+        + '<td><select class="form-control input-sm leg-side">'
+        +   '<option value="1">Buy</option><option value="2">Sell</option>'
+        + '</select></td>'
+        + '<td><input type="number" class="form-control input-sm leg-ratio" value="1" min="1"></td>'
+        + '<td><input type="number" step=".01" class="form-control input-sm leg-strike" placeholder="Strike"></td>'
+        + '<td><input type="text" class="form-control input-sm leg-maturity" placeholder="YYYYMMDD"></td>'
+        + '<td><select class="form-control input-sm leg-poseffect">'
+        +   '<option value="O">Open</option><option value="C">Close</option>'
+        + '</select></td>'
+        + '<td><button type="button" class="btn btn-danger btn-xs remove-leg">X</button></td>'
+        + '</tr>'
+      );
+    }
+    return this._legTpl;
+  },
 
   render: function() {
     this.$el.html(this.template(this.model.attributes));
@@ -994,11 +1136,12 @@ App.Views.MultilegTicket = Backbone.View.extend({
     "click .remove-leg": "removeLegRow",
     "change #ml-ordType": "updateOrdType",
     "change .leg-cfi": "updateLegFields",
+    "change .leg-preset": "updateLegPreset",
     submit: "submit"
   },
 
   addLegRow: function() {
-    this.$("#legs-table tbody").append(this.legRowTemplate());
+    this.$("#legs-table tbody").append(this.getLegRowTemplate()());
   },
 
   removeLegRow: function(e) {
@@ -1015,6 +1158,20 @@ App.Views.MultilegTicket = Backbone.View.extend({
     var isOption = ($(e.target).val() === "OC" || $(e.target).val() === "OP");
     row.find('.leg-strike').prop('disabled', !isOption).prop('required', isOption);
     row.find('.leg-maturity').prop('disabled', !isOption).prop('required', isOption);
+  },
+
+  updateLegPreset: function(e) {
+    var row = $(e.target).closest('tr');
+    var opt = $(e.target).find(':selected');
+    var cfi = opt.data('cfi');
+    var strike = opt.data('strike');
+    var maturity = opt.data('maturity');
+
+    if (cfi) {
+      row.find('.leg-cfi').val(cfi);
+      row.find('.leg-strike').val(strike || '').prop('disabled', false).prop('required', true);
+      row.find('.leg-maturity').val(maturity || '').prop('disabled', false).prop('required', true);
+    }
   },
 
   submit: function(e) {
@@ -1106,6 +1263,40 @@ App.prettyPutOrCall = function(val) {
     case "1": return "Call";
   }
   return val != null ? val : "";
+};
+
+App.prettyOrdStatus = function(val) {
+  switch (val) {
+    case "0": return "New";
+    case "1": return "Partial Fill";
+    case "2": return "Filled";
+    case "3": return "Done for Day";
+    case "4": return "Canceled";
+    case "5": return "Replaced";
+    case "6": return "Pending Cancel";
+    case "7": return "Stopped";
+    case "8": return "Rejected";
+    case "9": return "Suspended";
+    case "A": return "Pending New";
+    case "B": return "Calculated";
+    case "C": return "Expired";
+    case "D": return "Accepted";
+    case "E": return "Pending Replace";
+  }
+  return val || "Pending";
+};
+
+App.ordStatusClass = function(val) {
+  switch (val) {
+    case "0": return "label-info";
+    case "1": return "label-primary";
+    case "2": return "label-success";
+    case "4": return "label-warning";
+    case "8": return "label-danger";
+    case "A": return "label-default";
+    case "E": return "label-default";
+  }
+  return "label-default";
 };
 
 

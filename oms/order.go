@@ -55,6 +55,9 @@ type Order struct {
 	Tif                enum.TimeInForce   `json:"tif"`
 	OpenClose          enum.OpenClose     `json:"open_close"`
 	Legs               []Leg              `json:"legs,omitempty"`
+	OrdStatus          string             `json:"ord_status"`
+	ExecType           string             `json:"exec_type"`
+	RejectionReason    string             `json:"rejection_reason,omitempty"`
 }
 
 // Init initialized computed fields on order from user input

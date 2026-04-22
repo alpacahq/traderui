@@ -52,22 +52,52 @@ func (a *FIXApplication) FromApp(msg *quickfix.Message, sessionID quickfix.Sessi
 	case enum.MsgType_EXECUTION_REPORT:
 		return a.onExecutionReport(msg, sessionID)
 	case enum.MsgType_ORDER_CANCEL_REJECT:
-		var text quickfix.FIXString
-		if msg.Body.Has(tag.Text) {
-			_ = msg.Body.GetField(tag.Text, &text)
-		}
-		log.Printf("[WARN] Order Cancel Reject: %s", string(text))
-		return nil
+		return a.onOrderCancelReject(msg, sessionID)
 	case enum.MsgType_BUSINESS_MESSAGE_REJECT:
-		var text quickfix.FIXString
-		if msg.Body.Has(tag.Text) {
-			_ = msg.Body.GetField(tag.Text, &text)
-		}
-		log.Printf("[WARN] Business Message Reject: %s", string(text))
-		return nil
+		return a.onBusinessMessageReject(msg, sessionID)
 	}
 
 	return quickfix.UnsupportedMessageType()
+}
+
+func (a *FIXApplication) onOrderCancelReject(msg *quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
+	a.Lock()
+	defer a.Unlock()
+
+	text := getStringTag(msg, tag.Text, "")
+	log.Printf("[WARN] Order Cancel Reject: %s", text)
+
+	var clOrdID field.ClOrdIDField
+	if err := msg.Body.Get(&clOrdID); err == nil {
+		if order, oErr := a.GetByClOrdID(clOrdID.String()); oErr == nil {
+			ordStatus := getStringTag(msg, tag.OrdStatus, "")
+			order.OrdStatus = ordStatus
+			if text != "" {
+				order.RejectionReason = text
+			}
+		}
+	}
+
+	if msg.Body.Has(tag.OrigClOrdID) {
+		origClOrdID := getStringTag(msg, tag.OrigClOrdID, "")
+		if origClOrdID != "" {
+			if order, oErr := a.GetByClOrdID(origClOrdID); oErr == nil {
+				ordStatus := getStringTag(msg, tag.OrdStatus, "")
+				order.OrdStatus = ordStatus
+				if text != "" {
+					order.RejectionReason = text
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *FIXApplication) onBusinessMessageReject(msg *quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
+	text := getStringTag(msg, tag.Text, "")
+	log.Printf("[WARN] Business Message Reject: %s", text)
+	return nil
 }
 
 func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
@@ -98,6 +128,37 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 	var leavesQty field.LeavesQtyField
 	if err := msg.Body.Get(&leavesQty); err != nil {
 		return err
+	}
+
+	if msg.Body.Has(tag.OrdStatus) {
+		order.OrdStatus = getStringTag(msg, tag.OrdStatus, order.OrdStatus)
+	}
+	if msg.Body.Has(tag.ExecType) {
+		order.ExecType = getStringTag(msg, tag.ExecType, order.ExecType)
+	}
+	if msg.Body.Has(tag.OrderID) {
+		order.OrderID = getStringTag(msg, tag.OrderID, order.OrderID)
+	}
+
+	if order.OrdStatus == string(enum.OrdStatus_REJECTED) {
+		order.RejectionReason = getStringTag(msg, tag.Text, "")
+		if msg.Body.Has(tag.OrdRejReason) {
+			rejCode := getStringTag(msg, tag.OrdRejReason, "")
+			if rejCode != "" && order.RejectionReason != "" {
+				order.RejectionReason = order.RejectionReason + " (code: " + rejCode + ")"
+			} else if rejCode != "" {
+				order.RejectionReason = "Rejection code: " + rejCode
+			}
+		}
+		log.Printf("[WARN] Order REJECTED clOrdID=%s reason=%s", clOrdID.String(), order.RejectionReason)
+	}
+
+	if order.OrdStatus == string(enum.OrdStatus_CANCELED) {
+		reason := getStringTag(msg, tag.Text, "")
+		if reason != "" {
+			order.RejectionReason = reason
+		}
+		log.Printf("[INFO] Order CANCELED clOrdID=%s reason=%s", clOrdID.String(), reason)
 	}
 
 	isLegER := false
@@ -147,6 +208,11 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 		exec.Quantity = lastShares.String()
 		exec.Price = price.String()
 		exec.Session = order.Session
+		exec.ClOrdID = clOrdID.String()
+		exec.IsLegExecution = isLegER
+		exec.OrderID = getStringTag(msg, tag.OrderID, order.OrderID)
+		exec.ExecID = getStringTag(msg, tag.ExecID, "")
+		exec.OrdStatus = getStringTag(msg, tag.OrdStatus, "")
 
 		if isLegER {
 			exec.Symbol = getStringTag(msg, tag.Symbol, order.Symbol)

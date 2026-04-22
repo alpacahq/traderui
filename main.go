@@ -20,6 +20,32 @@ import (
 	"github.com/quickfixgo/quickfix"
 )
 
+type SymbolEntry struct {
+	Symbol            string `json:"symbol"`
+	Type              string `json:"type"`
+	Description       string `json:"description"`
+	CFICode           string `json:"cfi_code,omitempty"`
+	StrikePrice       string `json:"strike_price,omitempty"`
+	MaturityDate      string `json:"maturity_date,omitempty"`
+	MaturityMonthYear string `json:"maturity_month_year,omitempty"`
+}
+
+type SymbolsConfig struct {
+	Symbols []SymbolEntry `json:"symbols"`
+}
+
+func loadSymbolsConfig(filePath string) (*SymbolsConfig, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return &SymbolsConfig{}, nil
+	}
+	var cfg SymbolsConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("error parsing symbols config: %w", err)
+	}
+	return &cfg, nil
+}
+
 type fixFactory interface {
 	NewOrderSingle(ord oms.Order) (msg quickfix.Messagable, err error)
 	OrderCancelRequest(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
@@ -30,19 +56,26 @@ type fixFactory interface {
 }
 
 type tradeClient struct {
-	SessionIDs map[string]quickfix.SessionID
+	SessionIDs    map[string]quickfix.SessionID
+	symbolsConfig *SymbolsConfig
 	fixFactory
 	*oms.OrderManager
 }
 
-func newTradeClient(factory fixFactory, idGen oms.ClOrdIDGenerator) *tradeClient {
+func newTradeClient(factory fixFactory, idGen oms.ClOrdIDGenerator, symbols *SymbolsConfig) *tradeClient {
 	tc := &tradeClient{
-		SessionIDs:   make(map[string]quickfix.SessionID),
-		fixFactory:   factory,
-		OrderManager: oms.NewOrderManager(idGen),
+		SessionIDs:    make(map[string]quickfix.SessionID),
+		symbolsConfig: symbols,
+		fixFactory:    factory,
+		OrderManager:  oms.NewOrderManager(idGen),
 	}
 
 	return tc
+}
+
+func (c tradeClient) SymbolsAsJSON() (string, error) {
+	b, err := json.Marshal(c.symbolsConfig.Symbols)
+	return string(b), err
 }
 
 func (c tradeClient) SessionsAsJSON() (string, error) {
@@ -334,6 +367,16 @@ func (c tradeClient) updateOrder(w http.ResponseWriter, r *http.Request) {
 	c.writeOrderJSON(w, order)
 }
 
+func (c tradeClient) getSymbols(w http.ResponseWriter, r *http.Request) {
+	b, err := json.Marshal(c.symbolsConfig.Symbols)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
 var port = flag.String("port", "8080", "HTTP listen port")
 
 func (c tradeClient) newMultilegOrder(w http.ResponseWriter, r *http.Request) {
@@ -467,10 +510,18 @@ func main() {
 		return
 	}
 
+	symbolsCfgPath := path.Join("config", "symbols.json")
+	symbolsCfg, err := loadSymbolsConfig(symbolsCfgPath)
+	if err != nil {
+		fmt.Printf("Error loading symbols config %v: %v\n", symbolsCfgPath, err)
+		return
+	}
+	log.Printf("Loaded %d symbols from %s\n", len(symbolsCfg.Symbols), symbolsCfgPath)
+
 	logFactory := NewFancyLog()
 
 	var fixApp quickfix.Application
-	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator))
+	app := newTradeClient(basic.FIXFactory{}, new(alpaca.ClOrdIDGenerator), symbolsCfg)
 	fixApp = &basic.FIXApplication{
 		SessionIDs:   app.SessionIDs,
 		OrderManager: app.OrderManager,
@@ -500,6 +551,7 @@ func main() {
 	router.HandleFunc("/multileg-orders", app.newMultilegOrder).Methods("POST")
 	router.HandleFunc("/multileg-orders/{id:[0-9]+}", app.updateMultilegOrder).Methods("PUT")
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
+	router.HandleFunc("/symbols", app.getSymbols).Methods("GET")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	router.HandleFunc("/", app.traderView)

@@ -14,4 +14,9 @@ type Execution struct {
 	MaturityMonthYear string             `json:"maturity_month_year"`
 	PutOrCall         enum.PutOrCall     `json:"put_or_call"`
 	StrikePrice       string             `json:"strike_price"`
+	IsLegExecution    bool               `json:"is_leg"`
+	ClOrdID           string             `json:"clord_id"`
+	OrderID           string             `json:"order_id"`
+	ExecID            string             `json:"exec_id"`
+	OrdStatus         string             `json:"ord_status"`
 }

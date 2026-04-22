@@ -1,0 +1,45 @@
+{
+  "symbols": [
+    {
+      "symbol": "AAPL",
+      "type": "CS",
+      "description": "Apple Inc."
+    },
+    {
+      "symbol": "AAPL",
+      "type": "OPT",
+      "description": "AAPL Jul 2025 200 Call",
+      "cfi_code": "OC",
+      "strike_price": "200",
+      "maturity_date": "20250718",
+      "maturity_month_year": "202507"
+    },
+    {
+      "symbol": "AAPL",
+      "type": "OPT",
+      "description": "AAPL Jul 2025 200 Put",
+      "cfi_code": "OP",
+      "strike_price": "200",
+      "maturity_date": "20250718",
+      "maturity_month_year": "202507"
+    },
+    {
+      "symbol": "AAPL",
+      "type": "OPT",
+      "description": "AAPL Jul 2025 210 Call",
+      "cfi_code": "OC",
+      "strike_price": "210",
+      "maturity_date": "20250718",
+      "maturity_month_year": "202507"
+    },
+    {
+      "symbol": "AAPL",
+      "type": "OPT",
+      "description": "AAPL Jul 2025 210 Put",
+      "cfi_code": "OP",
+      "strike_price": "210",
+      "maturity_date": "20250718",
+      "maturity_month_year": "202507"
+    }
+  ]
+}
