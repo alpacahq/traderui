@@ -96,7 +96,8 @@ func (a *FIXApplication) onOrderCancelReject(msg *quickfix.Message, sessionID qu
 	defer a.Unlock()
 
 	text := getStringTag(msg, tag.Text, "")
-	log.Printf("[WARN] Order Cancel Reject: %s", text)
+	rejRespTo := getStringTag(msg, tag.CxlRejResponseTo, "")
+	log.Printf("[WARN] Order Cancel Reject: respTo=%s text=%s", rejRespTo, text)
 
 	lookup := getStringTag(msg, tag.OrigClOrdID, "")
 	if lookup == "" {
@@ -111,22 +112,69 @@ func (a *FIXApplication) onOrderCancelReject(msg *quickfix.Message, sessionID qu
 		return nil
 	}
 
+	// OrdStatus on an OrderCancelReject reflects the CURRENT state of the
+	// order as known by the broker (typically still NEW/PARTIAL_FILL). It
+	// is not a terminal rejection of the order itself.
 	if status := getStringTag(msg, tag.OrdStatus, ""); status != "" {
 		order.OrdStatus = status
 	}
-	if execType := getStringTag(msg, tag.ExecType, ""); execType != "" {
-		order.ExecType = execType
+
+	reason := text
+	if reason == "" {
+		reason = "Cancel/Replace Rejected"
 	}
-	if text != "" {
-		order.RejectionReason = text
-	}
+	order.LastOpRejection = reason
 
 	return nil
 }
 
 func (a *FIXApplication) onBusinessMessageReject(msg *quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
+	a.Lock()
+	defer a.Unlock()
+
 	text := getStringTag(msg, tag.Text, "")
-	log.Printf("[WARN] Business Message Reject: %s", text)
+	refMsgType := getStringTag(msg, tag.RefMsgType, "")
+	refID := getStringTag(msg, tag.BusinessRejectRefID, "")
+	rejCode := getStringTag(msg, tag.BusinessRejectReason, "")
+
+	log.Printf("[WARN] Business Message Reject: refMsgType=%s refID=%s code=%s text=%s",
+		refMsgType, refID, rejCode, text)
+
+	if refID == "" {
+		return nil
+	}
+
+	order, err := a.GetByClOrdID(refID)
+	if err != nil {
+		return nil
+	}
+
+	reason := text
+	if reason == "" && rejCode != "" {
+		reason = "Business reject code: " + rejCode
+	} else if reason != "" && rejCode != "" {
+		reason = reason + " (code: " + rejCode + ")"
+	}
+	if reason == "" {
+		reason = "Business Message Reject"
+	}
+
+	// Cancel (F), CancelReplace (G), MultilegCancelReplace (AC) and
+	// MultilegCancel (same F in FIX 4.2) all operate on an existing order;
+	// a reject means the order is still live with its previous state.
+	switch refMsgType {
+	case "F", "G", "AC":
+		order.LastOpRejection = reason
+		return nil
+	}
+
+	// Reject is against a new-order message (D or AB) — the order itself
+	// never made it. Mark it rejected.
+	order.OrdStatus = string(enum.OrdStatus_REJECTED)
+	order.ExecType = string(enum.ExecType_REJECTED)
+	order.RejectionReason = reason
+	order.Open = "0"
+
 	return nil
 }
 
@@ -173,6 +221,10 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 	}
 
 	if !isLegER {
+		// Keep order.ClOrdID synced with the latest accepted ClOrdID so
+		// that future amends/cancels use the correct OrigClOrdID.
+		order.ClOrdID = clOrdID.String()
+
 		if msg.Body.Has(tag.OrdStatus) {
 			order.OrdStatus = getStringTag(msg, tag.OrdStatus, order.OrdStatus)
 		}
@@ -213,6 +265,7 @@ func (a *FIXApplication) onExecutionReport(msg *quickfix.Message, sessionID quic
 			string(enum.ExecType_FILL),
 			string(enum.ExecType_TRADE):
 			order.RejectionReason = ""
+			order.LastOpRejection = ""
 		}
 	}
 

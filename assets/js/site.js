@@ -359,6 +359,15 @@ App.Views.OrderDetails = Backbone.View.extend({
   </div>
   <% } %>
 
+  <% if (last_op_rejection) { %>
+  <div class="form-group">
+    <label class="col-sm-2 control-label">Last Op Reject</label>
+    <div class="col-sm-10">
+      <p class="form-control-static text-warning"><strong>&#9888; <%= last_op_rejection %></strong></p>
+    </div>
+  </div>
+  <% } %>
+
   <% if (legs && legs.length) { %>
   <div class="form-group">
     <label class="col-sm-2 control-label">Legs</label>
@@ -549,6 +558,7 @@ App.Views.OrderRowView = Backbone.View.extend({
 <td><%= avg_px %></td>
 <td><span class="label <%= App.ordStatusClass(ord_status) %>"><%= App.prettyOrdStatus(ord_status) %></span></td>
 <td><% if(rejection_reason){ %><span class="text-danger" title="<%= rejection_reason %>"><%= rejection_reason %></span><% } %></td>
+<td><% if(last_op_rejection){ %><span class="text-warning" title="<%= last_op_rejection %>">&#9888; <%= last_op_rejection %></span><% } %></td>
 <td><%= session_id %></td>
 `),
 
@@ -676,6 +686,7 @@ App.Views.OrdersView = Backbone.View.extend({
       <th>AvgPx</th>
       <th>Status</th>
       <th>Rejection Reason</th>
+      <th>Op Reject</th>
       <th>Session</th>
     </tr>
   </thead>

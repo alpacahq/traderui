@@ -252,6 +252,8 @@ func (c tradeClient) deleteOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	order.LastOpRejection = ""
+
 	err = quickfix.SendToTarget(msg, order.SessionID)
 	if err != nil {
 		log.Printf("[ERROR] err = %+v\n", err)
@@ -413,13 +415,18 @@ func (c tradeClient) updateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Do not rotate order.ClOrdID here. We only advance it when the
+	// counterparty accepts the amend (ExecType=REPLACED); otherwise a
+	// rejection would leave order.ClOrdID pointing at an unacked ID and
+	// subsequent OrigClOrdID values would be wrong.
+	order.LastOpRejection = ""
+
 	err = quickfix.SendToTarget(msg, order.SessionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	order.ClOrdID = clOrdID
 	c.writeOrderJSON(w, order)
 }
 
@@ -526,13 +533,14 @@ func (c tradeClient) updateMultilegOrder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	order.LastOpRejection = ""
+
 	err = quickfix.SendToTarget(msg, order.SessionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	order.ClOrdID = clOrdID
 	c.writeOrderJSON(w, order)
 }
 

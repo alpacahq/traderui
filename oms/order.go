@@ -58,6 +58,11 @@ type Order struct {
 	OrdStatus          string             `json:"ord_status"`
 	ExecType           string             `json:"exec_type"`
 	RejectionReason    string             `json:"rejection_reason,omitempty"`
+	// LastOpRejection holds the most recent rejection text for a cancel or
+	// amend operation on an otherwise live order. Cleared on the next
+	// successful execution report. Separate from RejectionReason (which is
+	// terminal: the order itself was rejected).
+	LastOpRejection string `json:"last_op_rejection,omitempty"`
 }
 
 // Init initialized computed fields on order from user input
