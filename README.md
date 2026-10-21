@@ -21,6 +21,18 @@ make build
 This will try to connect to a FIX acceptor on `localhost:5001` and expose the UI on `localhost:8080`.
 You can modify the quickfix config for this found in config/tradeclient.cfg to suit your own needs.
 
+## Locate
+
+The `Locate` tab sends `QuoteRequest (35=R)` and `OrderStatusRequest (35=H)` for Alpaca's Locate FIX 4.2 profile; Locates are created from the Orders tab (Buy, Market or Limit, TIF IOC or FOK). Every inbound application message, including `Quote`, `QuoteAcknowledgement`, `BusinessMessageReject` and `ExecutionReport`, is listed on the Locate tab.
+
+```sh
+./bin/traderui -file-store -clordid-prefix "$(date +%s)-" config/locate.cfg
+```
+
+- `config/locate.cfg` sets mutual TLS and the Locate CompIDs; fill in the certificate paths and server name.
+- `-file-store` keeps sequence numbers in `FileStorePath` so the session resumes across restarts. Do not set `ResetOnLogon` against the Locate acceptor.
+- `-clordid-prefix` keeps generated ClOrdIDs unique across restarts; the acceptor rejects a repeated ClOrdID.
+
 ## Licensing
 This software is available under the QuickFIX Software License. Please see the [LICENSE](https://github.com/quickfixgo/traderui/blob/main/LICENSE) for the terms specified by the QuickFIX Software License.
 

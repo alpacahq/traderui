@@ -6,6 +6,8 @@ import (
 
 	"github.com/quickfixgo/enum"
 	"github.com/quickfixgo/field"
+	"github.com/quickfixgo/tag"
+	"github.com/quickfixgo/traderui/locate"
 	"github.com/quickfixgo/traderui/oms"
 	"github.com/quickfixgo/traderui/secmaster"
 
@@ -61,8 +63,43 @@ func (FIXFactory) SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequ
 	return
 }
 
+// QuoteRequest builds a FIX 4.2 QuoteRequest (35=R) for one symbol.
+func (FIXFactory) QuoteRequest(req locate.QuoteRequest) (quickfix.Messagable, error) {
+	if req.SessionID.BeginString != quickfix.BeginStringFIX42 {
+		return nil, errors.New("Unhandled BeginString")
+	}
+
+	msg := quickfix.NewMessage()
+	msg.Header.SetString(tag.MsgType, string(enum.MsgType_QUOTE_REQUEST))
+	msg.Body.SetString(tag.QuoteReqID, req.QuoteReqID)
+
+	group := quickfix.NewRepeatingGroup(tag.NoRelatedSym, quickfix.GroupTemplate{quickfix.GroupElement(tag.Symbol)})
+	group.Add().SetString(tag.Symbol, req.Symbol)
+	msg.Body.SetGroup(group)
+
+	return msg, nil
+}
+
+// OrderStatusRequest builds a FIX 4.2 OrderStatusRequest (35=H) that carries
+// only OrderID, which is all the Locate profile requires.
+func (FIXFactory) OrderStatusRequest(req locate.OrderStatusRequest) (quickfix.Messagable, error) {
+	if req.SessionID.BeginString != quickfix.BeginStringFIX42 {
+		return nil, errors.New("Unhandled BeginString")
+	}
+
+	msg := quickfix.NewMessage()
+	msg.Header.SetString(tag.MsgType, string(enum.MsgType_ORDER_STATUS_REQUEST))
+	msg.Body.SetString(tag.OrderID, req.OrderID)
+
+	return msg, nil
+}
+
 func populateOrder(genMessage quickfix.Messagable, ord oms.Order) (quickfix.Messagable, error) {
 	msg := genMessage.ToMessage()
+
+	if ord.TimeInForce != "" {
+		msg.Body.Set(field.NewTimeInForce(ord.TimeInForce))
+	}
 
 	switch ord.OrdType {
 	case enum.OrdType_LIMIT, enum.OrdType_STOP_LIMIT:

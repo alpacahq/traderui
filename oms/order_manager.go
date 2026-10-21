@@ -13,11 +13,13 @@ type OrderManager struct {
 	sync.RWMutex
 	orderID     int
 	executionID int
+	messageID   int
 	clOrdID     ClOrdIDGenerator
 
 	orders        map[int]*Order
 	clOrdIDLookup map[string]*Order
 	executions    map[int]*Execution
+	messages      map[int]*Message
 }
 
 func NewOrderManager(idGen ClOrdIDGenerator) *OrderManager {
@@ -25,6 +27,7 @@ func NewOrderManager(idGen ClOrdIDGenerator) *OrderManager {
 		clOrdIDLookup: make(map[string]*Order),
 		orders:        make(map[int]*Order),
 		executions:    make(map[int]*Execution),
+		messages:      make(map[int]*Message),
 		clOrdID:       idGen,
 	}
 }
@@ -45,6 +48,15 @@ func (om *OrderManager) GetAllExecutions() []*Execution {
 	}
 
 	return executions
+}
+
+func (om *OrderManager) GetAllMessages() []*Message {
+	messages := make([]*Message, 0, len(om.messages))
+	for _, v := range om.messages {
+		messages = append(messages, v)
+	}
+
+	return messages
 }
 
 func (om *OrderManager) Get(id int) (*Order, error) {
@@ -92,6 +104,17 @@ func (om *OrderManager) SaveExecution(exec *Execution) error {
 	om.executions[exec.ID] = exec
 
 	return nil
+}
+
+func (om *OrderManager) SaveMessage(msg *Message) {
+	om.messageID++
+	msg.ID = om.messageID
+	om.messages[msg.ID] = msg
+}
+
+// NextClOrdID returns a fresh ID without attaching it to an order.
+func (om *OrderManager) NextClOrdID() string {
+	return om.clOrdID.Next()
 }
 
 func (om *OrderManager) AssignNextClOrdID(order *Order) string {

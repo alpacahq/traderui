@@ -6,6 +6,8 @@ import (
 )
 
 type ClOrdIDGenerator struct {
+	// Prefix is prepended to every ClOrdID so IDs stay unique across restarts.
+	Prefix      string
 	clOrdIDLock sync.Mutex
 	clOrdID     int
 }
@@ -15,5 +17,5 @@ func (f *ClOrdIDGenerator) Next() string {
 	defer f.clOrdIDLock.Unlock()
 
 	f.clOrdID++
-	return strconv.Itoa(f.clOrdID)
+	return f.Prefix + strconv.Itoa(f.clOrdID)
 }
