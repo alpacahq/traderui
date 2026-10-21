@@ -6,3 +6,5 @@ tmp
 bin
 .exe
 dist/
+certs/
+config/*.local.cfg

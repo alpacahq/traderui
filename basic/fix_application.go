@@ -2,6 +2,7 @@ package basic
 
 import (
 	"log"
+	"strings"
 
 	"github.com/quickfixgo/enum"
 	"github.com/quickfixgo/field"
@@ -41,16 +42,29 @@ func (a *FIXApplication) ToApp(msg *quickfix.Message, sessionID quickfix.Session
 	return
 }
 
-// FromApp listens for just execution reports
+// FromApp records every inbound application message, then handles execution
+// reports. Locate replies (Quote, QuoteAcknowledgement, BusinessMessageReject)
+// are only recorded.
 func (a *FIXApplication) FromApp(msg *quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
 	msgType, err := msg.MsgType()
 	if err != nil {
 		return err
 	}
 
+	a.Lock()
+	a.SaveMessage(&oms.Message{
+		Session: sessionID.String(),
+		MsgType: msgType,
+		Raw:     strings.ReplaceAll(msg.String(), "\x01", "|"),
+	})
+	a.Unlock()
+
 	switch enum.MsgType(msgType) {
 	case enum.MsgType_EXECUTION_REPORT:
 		return a.onExecutionReport(msg, sessionID)
+	// 35=b is QuoteAcknowledgement in FIX 4.2; the enum names it after the later MassQuoteAcknowledgement.
+	case enum.MsgType_QUOTE, enum.MsgType_MASS_QUOTE_ACKNOWLEDGEMENT, enum.MsgType_BUSINESS_MESSAGE_REJECT:
+		return nil
 	}
 
 	return quickfix.UnsupportedMessageType()

@@ -13,16 +13,20 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/quickfixgo/traderui/basic"
+	"github.com/quickfixgo/traderui/locate"
 	"github.com/quickfixgo/traderui/oms"
 	"github.com/quickfixgo/traderui/secmaster"
 
 	"github.com/quickfixgo/quickfix"
+	"github.com/quickfixgo/quickfix/store/file"
 )
 
 type fixFactory interface {
 	NewOrderSingle(ord oms.Order) (msg quickfix.Messagable, err error)
 	OrderCancelRequest(ord oms.Order, clOrdID string) (msg quickfix.Messagable, err error)
 	SecurityDefinitionRequest(req secmaster.SecurityDefinitionRequest) (msg quickfix.Messagable, err error)
+	QuoteRequest(req locate.QuoteRequest) (msg quickfix.Messagable, err error)
+	OrderStatusRequest(req locate.OrderStatusRequest) (msg quickfix.Messagable, err error)
 }
 
 type tradeClient struct {
@@ -65,6 +69,14 @@ func (c tradeClient) ExecutionsAsJSON() (string, error) {
 	defer c.RUnlock()
 
 	b, err := json.Marshal(c.GetAllExecutions())
+	return string(b), err
+}
+
+func (c tradeClient) MessagesAsJSON() (string, error) {
+	c.RLock()
+	defer c.RUnlock()
+
+	b, err := json.Marshal(c.GetAllMessages())
 	return string(b), err
 }
 
@@ -227,6 +239,88 @@ func (c tradeClient) newSecurityDefintionRequest(w http.ResponseWriter, r *http.
 	}
 }
 
+func (c tradeClient) getMessages(w http.ResponseWriter, r *http.Request) {
+	outgoingJSON, err := c.MessagesAsJSON()
+	if err != nil {
+		log.Printf("[ERROR] err = %+v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, outgoingJSON)
+}
+
+func (c tradeClient) newQuoteRequest(w http.ResponseWriter, r *http.Request) {
+	var req locate.QuoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sessionID, ok := c.SessionIDs[req.Session]
+	if !ok {
+		log.Println("[ERROR] Invalid SessionID")
+		http.Error(w, "Invalid SessionID", http.StatusBadRequest)
+		return
+	}
+	req.SessionID = sessionID
+
+	if req.Symbol == "" {
+		http.Error(w, "symbol is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.QuoteReqID == "" {
+		req.QuoteReqID = c.NextClOrdID()
+	}
+
+	msg, err := c.fixFactory.QuoteRequest(req)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = quickfix.SendToTarget(msg, req.SessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (c tradeClient) newOrderStatusRequest(w http.ResponseWriter, r *http.Request) {
+	var req locate.OrderStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sessionID, ok := c.SessionIDs[req.Session]
+	if !ok {
+		log.Println("[ERROR] Invalid SessionID")
+		http.Error(w, "Invalid SessionID", http.StatusBadRequest)
+		return
+	}
+	req.SessionID = sessionID
+
+	if req.OrderID == "" {
+		http.Error(w, "order_id is required", http.StatusBadRequest)
+		return
+	}
+
+	msg, err := c.fixFactory.OrderStatusRequest(req)
+	if err != nil {
+		log.Printf("[ERROR] %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = quickfix.SendToTarget(msg, req.SessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 	var order oms.Order
 	decoder := json.NewDecoder(r.Body)
@@ -270,6 +364,8 @@ func (c tradeClient) newOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	fileStore := flag.Bool("file-store", false, "keep FIX sequence numbers and messages in FileStorePath, so sessions resume across restarts")
+	clOrdIDPrefix := flag.String("clordid-prefix", "", "prefix for generated ClOrdIDs; set a unique value per run when the acceptor rejects duplicates across restarts")
 	flag.Parse()
 
 	cfgFileName := path.Join("config", "tradeclient.cfg")
@@ -292,13 +388,18 @@ func main() {
 	logFactory := NewFancyLog()
 
 	var fixApp quickfix.Application
-	app := newTradeClient(basic.FIXFactory{}, new(basic.ClOrdIDGenerator))
+	app := newTradeClient(basic.FIXFactory{}, &basic.ClOrdIDGenerator{Prefix: *clOrdIDPrefix})
 	fixApp = &basic.FIXApplication{
 		SessionIDs:   app.SessionIDs,
 		OrderManager: app.OrderManager,
 	}
 
-	initiator, err := quickfix.NewInitiator(fixApp, quickfix.NewMemoryStoreFactory(), appSettings, logFactory)
+	storeFactory := quickfix.MessageStoreFactory(quickfix.NewMemoryStoreFactory())
+	if *fileStore {
+		storeFactory = file.NewStoreFactory(appSettings)
+	}
+
+	initiator, err := quickfix.NewInitiator(fixApp, storeFactory, appSettings, logFactory)
 	if err != nil {
 		log.Fatalf("Unable to create Initiator: %s\n", err)
 	}
@@ -319,6 +420,10 @@ func main() {
 	router.HandleFunc("/executions/{id:[0-9]+}", app.getExecution).Methods("GET")
 
 	router.HandleFunc("/securitydefinitionrequest", app.newSecurityDefintionRequest).Methods("POST")
+
+	router.HandleFunc("/quoterequests", app.newQuoteRequest).Methods("POST")
+	router.HandleFunc("/orderstatusrequests", app.newOrderStatusRequest).Methods("POST")
+	router.HandleFunc("/messages", app.getMessages).Methods("GET")
 
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	router.HandleFunc("/", app.traderView)

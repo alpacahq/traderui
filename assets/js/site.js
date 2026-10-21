@@ -15,6 +15,7 @@ $(function() {
 setInterval(function() {
   App.orders.fetch({reset: true});
   App.executions.fetch({reset: true});
+  App.messages.fetch({reset: true});
   
 }, 1000);
 
@@ -39,6 +40,11 @@ var App = new( Backbone.View.extend({
       session_ids: options.session_ids  
     });
 
+    this.locateForm = new App.Models.LocateForm({
+      session_ids: options.session_ids
+    });
+
+    this.messages = new App.Collections.Messages(options.messages);
     this.orders = new App.Collections.Orders(options.orders);
     this.executions = new App.Collections.Executions(options.executions);
     this.router = new App.Router();
@@ -55,6 +61,7 @@ var App = new( Backbone.View.extend({
     $("#nav-order").addClass("active");
     $("#nav-execution").removeClass("active");
     $("#nav-secdef").removeClass("active");
+    $("#nav-locate").removeClass("active");
   },
 
   showExecutions: function() {
@@ -66,6 +73,7 @@ var App = new( Backbone.View.extend({
     $("#nav-order").removeClass("active");
     $("#nav-execution").addClass("active");
     $("#nav-secdef").removeClass("active");
+    $("#nav-locate").removeClass("active");
   },
 
   showSecurityDefinitions: function() {
@@ -74,6 +82,19 @@ var App = new( Backbone.View.extend({
     $("#nav-order").removeClass("active");
     $("#nav-execution").removeClass("active");
     $("#nav-secdef").addClass("active");
+    $("#nav-locate").removeClass("active");
+  },
+
+  showLocate: function() {
+    var locateView = new App.Views.Locate({model: this.locateForm});
+    var messagesView = new App.Views.MessagesView({collection: this.messages});
+
+    $("#app").html(locateView.render().el);
+    $("#app").append(messagesView.render().el);
+    $("#nav-order").removeClass("active");
+    $("#nav-execution").removeClass("active");
+    $("#nav-secdef").removeClass("active");
+    $("#nav-locate").addClass("active");
   },
 
   showOrderDetails: function(id) {
@@ -108,6 +129,7 @@ App.Router = Backbone.Router.extend({
     "orders": "index",
     "executions": "executions",
     "secdefs": "secdefs",
+    "locate": "locate",
     "orders/:id": "orderDetails",
     "executions/:id": "executionDetails",
   },
@@ -122,6 +144,10 @@ App.Router = Backbone.Router.extend({
 
   secdefs: function() {
     App.showSecurityDefinitions();
+  },
+
+  locate: function() {
+    App.showLocate();
   },
 
   orderDetails: function(id) {
@@ -145,11 +171,25 @@ App.Models.SecurityDefinitionRequest = Backbone.Model.extend({
   urlRoot: "securitydefinitionrequest"
 });
 
+App.Models.QuoteRequest = Backbone.Model.extend({
+  urlRoot: "/quoterequests"
+});
+
+App.Models.OrderStatusRequest = Backbone.Model.extend({
+  urlRoot: "/orderstatusrequests"
+});
+
+App.Models.LocateForm = Backbone.Model.extend({});
 App.Models.OrderTicket = Backbone.Model.extend({});
 App.Models.SecurityDefinitionForm = Backbone.Model.extend({});
 
 App.Collections.Orders = Backbone.Collection.extend({
   url: '/orders',
+  comparator: 'id'
+});
+
+App.Collections.Messages = Backbone.Collection.extend({
+  url: '/messages',
   comparator: 'id'
 });
 
@@ -461,6 +501,129 @@ App.Views.Executions = Backbone.View.extend({
   }
 });
 
+App.Views.MessageRowView = Backbone.View.extend({
+  tagName: 'tr',
+  template: _.template(`
+<td><%= id %></td>
+<td><%= App.prettyMsgType(msg_type) %></td>
+<td><%= session_id %></td>
+<td><code><%- raw %></code></td>
+`),
+
+  render: function() {
+    this.$el.html(this.template(this.model.attributes));
+    return this;
+  }
+});
+
+App.Views.MessagesView = Backbone.View.extend({
+  initialize: function() {
+    this.listenTo(this.collection, 'reset', this.addAll);
+  },
+
+  render: function() {
+    this.$el.html(`
+<h4>Inbound messages</h4>
+<table class='table table-striped' id='messages'>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Type</th>
+      <th>Session</th>
+      <th>Message</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>`);
+
+    this.addAll();
+
+    return this;
+  },
+
+  addAll: function() {
+    this.$("tbody").empty();
+    this.collection.forEach(this.addOne, this);
+    return this;
+  },
+
+  addOne: function(message) {
+    var row = new App.Views.MessageRowView({model: message});
+    this.$("tbody").append(row.render().el);
+  }
+});
+
+App.Views.Locate = Backbone.View.extend({
+  template: _.template(`
+<h4>Quote request</h4>
+<form class='form-inline' id='quote-request'>
+  <div class='form-group'>
+    <label for='quote_symbol'>Symbol</label>
+    <input type='text' class='form-control' name='symbol' id='quote_symbol' placeholder='Symbol' required>
+  </div>
+  <div class='form-group'>
+    <label for='quote_req_id'>QuoteReqID</label>
+    <input type='text' class='form-control' name='quote_req_id' id='quote_req_id' placeholder='generated if empty'>
+  </div>
+  <div class='form-group'>
+    <label for='quote_session'>Session</label>
+    <select class='form-control' name='session' id='quote_session'>
+      <% _.each(session_ids, function(i){ %><option><%= i %></option><% }); %>
+    </select>
+  </div>
+  <button type='submit' class='btn btn-default'>Send</button>
+</form>
+
+<h4>Order status request</h4>
+<form class='form-inline' id='status-request'>
+  <div class='form-group'>
+    <label for='status_order_id'>OrderID</label>
+    <input type='text' class='form-control' name='order_id' id='status_order_id' placeholder='OrderID (37) from the create response' size='40' required>
+  </div>
+  <div class='form-group'>
+    <label for='status_session'>Session</label>
+    <select class='form-control' name='session' id='status_session'>
+      <% _.each(session_ids, function(i){ %><option><%= i %></option><% }); %>
+    </select>
+  </div>
+  <button type='submit' class='btn btn-default'>Send</button>
+</form>
+<p class='help-block'>Create a Locate from the Orders tab: Buy, Market or Limit, TIF IOC (partial allowed) or FOK (all-or-none).</p>
+`),
+
+  events: {
+    "submit #quote-request": "sendQuote",
+    "submit #status-request": "sendStatus"
+  },
+
+  sendQuote: function(e) {
+    e.preventDefault();
+    var req = new App.Models.QuoteRequest();
+    req.set({
+      session_id:   this.$('#quote_session').val(),
+      symbol:       this.$('#quote_symbol').val(),
+      quote_req_id: this.$('#quote_req_id').val()
+    });
+    req.save();
+  },
+
+  sendStatus: function(e) {
+    e.preventDefault();
+    var req = new App.Models.OrderStatusRequest();
+    req.set({
+      session_id: this.$('#status_session').val(),
+      order_id:   this.$('#status_order_id').val()
+    });
+    req.save();
+  },
+
+  render: function() {
+    this.$el.html(this.template(this.model.attributes));
+    return this;
+  }
+});
+
 App.Views.OrdersView = Backbone.View.extend({
   initialize: function() {
     this.listenTo(this.collection, 'reset', this.addAll);
@@ -670,6 +833,7 @@ App.Views.OrderTicket = Backbone.View.extend({
       <select class='form-control' name='tif'>
         <option value='0'>Day</option>
         <option value='3'>IOC</option>
+        <option value='4'>FOK</option>
         <option value='2'>OPG</option>
         <option value='1'>GTC</option>
         <option value='5'>GTX</option>
@@ -816,6 +980,17 @@ App.prettySide = function(sideEnum) {
   }
 
   return sideEnum;
+};
+
+App.prettyMsgType = function(msgType) {
+  switch (msgType) {
+    case "8": return "ExecutionReport (8)";
+    case "S": return "Quote (S)";
+    case "b": return "QuoteAcknowledgement (b)";
+    case "j": return "BusinessMessageReject (j)";
+  };
+
+  return msgType;
 };
 
 App.prettyOrdType = function(ordTypeEnum) {

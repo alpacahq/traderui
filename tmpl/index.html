@@ -16,6 +16,7 @@
             <li id="nav-order"><a href="/orders" data-internal='true'>Orders</a></li>
             <li id="nav-execution"><a href="/executions" data-internal='true'>Executions</a></li>
             <li id="nav-secdef"><a href="/secdefs" data-internal='true'>Security Definitions</a></li>
+            <li id="nav-locate"><a href="/locate" data-internal='true'>Locate</a></li>
           </ul>
         </div>
       </div>
@@ -30,7 +31,8 @@
 var bootstrap = {
   session_ids: {{ .SessionsAsJSON }},
   orders: {{ .OrdersAsJSON }},
-  executions: {{ .ExecutionsAsJSON }}
+  executions: {{ .ExecutionsAsJSON }},
+  messages: {{ .MessagesAsJSON }}
 };
 
 App.render();

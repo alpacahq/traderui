@@ -22,6 +22,7 @@ type Order struct {
 	Session            string             `json:"session_id"`
 	Side               enum.Side          `json:"side"`
 	OrdType            enum.OrdType       `json:"ord_type"`
+	TimeInForce        enum.TimeInForce   `json:"tif"`
 	PriceDecimal       decimal.Decimal    `json:"-"`
 	Price              string             `json:"price"`
 	StopPriceDecimal   decimal.Decimal    `json:"-"`
