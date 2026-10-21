@@ -15,7 +15,10 @@ $(function() {
 setInterval(function() {
   App.orders.fetch({reset: true});
   App.executions.fetch({reset: true});
-  App.messages.fetch({reset: true});
+  // Only poll messages while the Locate view is on screen.
+  if (App.messagesView && $.contains(document.body, App.messagesView.el)) {
+    App.messages.fetch({reset: true});
+  }
   
 }, 1000);
 
@@ -87,10 +90,13 @@ var App = new( Backbone.View.extend({
 
   showLocate: function() {
     var locateView = new App.Views.Locate({model: this.locateForm});
-    var messagesView = new App.Views.MessagesView({collection: this.messages});
+    if (this.messagesView) {
+      this.messagesView.remove();
+    }
+    this.messagesView = new App.Views.MessagesView({collection: this.messages});
 
     $("#app").html(locateView.render().el);
-    $("#app").append(messagesView.render().el);
+    $("#app").append(this.messagesView.render().el);
     $("#nav-order").removeClass("active");
     $("#nav-execution").removeClass("active");
     $("#nav-secdef").removeClass("active");

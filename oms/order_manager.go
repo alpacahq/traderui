@@ -5,6 +5,9 @@ import (
 	"sync"
 )
 
+// MaxMessages is how many recent inbound messages the OrderManager retains.
+const MaxMessages = 500
+
 type ClOrdIDGenerator interface {
 	Next() string
 }
@@ -106,10 +109,13 @@ func (om *OrderManager) SaveExecution(exec *Execution) error {
 	return nil
 }
 
+// SaveMessage records an inbound message, keeping only the most recent
+// MaxMessages so a long-running session does not grow without bound.
 func (om *OrderManager) SaveMessage(msg *Message) {
 	om.messageID++
 	msg.ID = om.messageID
 	om.messages[msg.ID] = msg
+	delete(om.messages, msg.ID-MaxMessages)
 }
 
 // NextClOrdID returns a fresh ID without attaching it to an order.
